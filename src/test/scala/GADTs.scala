@@ -149,29 +149,34 @@ class GADTs extends FlatSpec with Matchers{
 
     // Type alias for the interpretation of composite IO programs
 
-    type FlatMapNatTrans[M[_]] = FlatMapNatTrans.F2[M, ?] ~> M
+    case class FlatMapF[M[_],A,B](p: M[A], f: A => M[B])
 
-    object FlatMapNatTrans{
-      
-      trait F2[M[_], A] {
-        type I
-        val fi: M[I]
-        val f: I => M[A]
+    object FlatMapF{
+      trait NatTrans[M[_]]{
+        def apply[A,B](fm: FlatMapF[M,A,B]): M[B]
       }
       
-      implicit def apply[M[_]: Monad]: FlatMapNatTrans[M] = 
-        new (FlatMapNatTrans[M]){
-          def apply[A](fa: F2[M,A]): M[A] = Monad[M].flatMap(fa.fi)(fa.f)
-        }
+      object NatTrans{
+        implicit def apply[P[_]: Monad]: NatTrans[P] = 
+          new (NatTrans[P]){ 
+            def apply[A,B](fm: FlatMapF[P,A,B]) = 
+              Monad[P].flatMap(fm.p)(fm.f)
+          }
+          // λ[NatTrans[P]]{ fm: FlatMapF[P,_,_] => Monad[P].flatMap(fm.p)(fm.f) }
+      }
     }
 
     // Type alias for the interpretation of pure programs
 
-    type PureNatTrans[M[_]] = Id ~> M
+    object PureF{
+      type NatTrans[M[_]] = Id ~> M
 
-    object PureNatTrans{
-      implicit def apply[M[_]: Monad]: PureNatTrans[M] = new (Id~>M){
-        def apply[X](a: X): M[X] = Monad[M].pure(a)
+      object NatTrans{
+        implicit def apply[M[_]: Monad]: NatTrans[M] = 
+          new (NatTrans[M]){
+            def apply[A](a: A): M[A] = Monad[M].pure(a)
+          }
+          // Lambda[NatTrans[M]]{ Monad[M].pure _ }
       }
     }
 
@@ -180,23 +185,19 @@ class GADTs extends FlatSpec with Matchers{
     def fold[F[_]](
         read: => F[String],
         write: String => F[Unit],
-        flatMap: FlatMapNatTrans.F2[F, ?] ~> F,
-        pure: PureNatTrans[F]): IO ~> F = {
+        flatMap: FlatMapF.NatTrans[F],
+        pure: PureF.NatTrans[F]): IO ~> F = {
 
       def foldFlatMap[A,B](fm: FlatMap[A,B]) = 
-        flatMap(new FlatMapNatTrans.F2[F, B] {
-          type I = A
-          val fi: F[A] = fold(read, write, flatMap, pure)(fm.p)
-          val f: A => F[B] = (x: A) => fold(read, write, flatMap, pure)(fm.f(x))
-        })
+        flatMap(FlatMapF(
+          fold(read, write, flatMap, pure)(fm.p),
+          (x: A) => fold(read, write, flatMap, pure)(fm.f(x))))
 
-      new (IO ~> F) {
-        def apply[A](io: IO[A]): F[A] = io match {
-          case Read => read
-          case Write(msg) => write(msg)
-          case fm: FlatMap[_,_] => foldFlatMap(fm)
-          case Pure(a) => pure(a)
-        }
+      λ[IO ~> F]{
+        case Read => read
+        case Write(msg) => write(msg)
+        case fm: FlatMap[_,_] => foldFlatMap(fm)
+        case Pure(a) => pure(a)
       }
     }
   }
@@ -213,7 +214,7 @@ class GADTs extends FlatSpec with Matchers{
       fold[Id](
         scala.io.StdIn.readLine,
         println,
-        FlatMapNatTrans[Id],
+        FlatMapF.NatTrans[Id],
         FunctionK.id)(io)
 
 
@@ -222,11 +223,11 @@ class GADTs extends FlatSpec with Matchers{
       val monad = WriterT.catsDataMonadWriterForWriterT[Id, String]
       import monad._
       
-      val FlatMapNatTransForWrite = new FlatMapNatTrans[Writer[String,?]]{
-        def apply[A](fa: FlatMapNatTrans.F2[Writer[String,?],A]): Writer[String,?][A] = 
+      val FlatMapNatTransForWrite = new FlatMapF.NatTrans[Writer[String,?]]{
+        def apply[A,B](fa: FlatMapF[Writer[String,?],A,B]): Writer[String,B] = 
           for {
             _ <- tell(s"FlatMap(")
-            a <- fa.fi
+            a <- fa.p
             _ <- tell(", ")
             b <- fa.f(a)
             _ <- tell(")")
@@ -237,7 +238,7 @@ class GADTs extends FlatSpec with Matchers{
         writer(("Read", "")),
         msg => tell(s"Write"),
         FlatMapNatTransForWrite,
-        PureNatTrans[Writer[String,?]])(io).written
+        PureF.NatTrans[Writer[String,?]])(io).written
     }
   }
 
