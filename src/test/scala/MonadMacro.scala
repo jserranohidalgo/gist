@@ -5,40 +5,41 @@ import org.scalatest._
 class MonadMacro extends FunSpec with Matchers{
   import cats.Monad
 
-  def test[P[_]: Monad](i: Int): P[Int] = monad[P,Int] { 
-    i + 1
-  }
 
   describe("Simple pure translation"){
     
+    def test[P[_]: Monad](i: Int): P[Int] = monad[P,Int] { 
+      i + 1
+    }
 
     it("should work with Option"){
       import cats.instances.option._
-      test[Option](2) shouldBe Some(2)
+      test[Option](2) shouldBe Some(3)
     }
 
     it("should work with Id"){
       import cats.Id
-      test[Id](2) shouldBe 2
+      test[Id](2) shouldBe 3
     }
   }
 
-  def test2[P[_]: Monad](i: Int): P[Int] = monad[P,Int] { 
-    val j: Int = i 
-    j+1
-  }
 
-  describe("One step flatMap"){
+  describe("Several simple flatMaps"){
     
+    def test[P[_]: Monad](i: Int): P[Int] = monad{ 
+      val s: String = "2"
+      val j: Int = s.length + i
+      j+1
+    }
 
     it("should work with Option"){
       import cats.instances.option._
-      test2[Option](2) shouldBe Some(3)
+      test[Option](2) shouldBe Some(4)
     }
 
     it("should work with Id"){
       import cats.Id
-      test2[Id](2) shouldBe 3
+      test[Id](2) shouldBe 4
     }
   }
 

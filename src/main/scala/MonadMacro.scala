@@ -1,6 +1,6 @@
 package org.hablapps.gist
 
-import scala.reflect.macros.whitebox
+import scala.reflect.macros._
 import scala.language.experimental.macros
 
 object monad{
@@ -25,7 +25,7 @@ object monad{
             q"$M.flatMap($M.pure($value)){ $name: $tpe => $r }"
         }
 
-      val r: Tree = lift(t.tree match {
+      val r: Tree = lift(c.untypecheck(t.tree) match {
         case b: Block => b
         case e => Block(List(),e)
       })
