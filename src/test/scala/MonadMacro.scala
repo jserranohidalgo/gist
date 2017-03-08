@@ -41,6 +41,24 @@ class MonadMacro extends FunSpec with Matchers{
       import cats.Id
       test[Id](2) shouldBe 4
     }
+  
+    abstract class Program[_]
+    case class Returns[A](a: A) extends Program[A]
+    case class DoAndThen[A,B](a: Program[A],
+      f: A => Program[B]) extends Program[B]
+
+    implicit val M = new Monad[Program]{
+      def pure[A](a: A) = Returns(a)
+      def flatMap[A,B](p: Program[A])(f: A => Program[B]) = 
+        DoAndThen(p,f)
+      def tailRecM[A,B](a: A)(f: A => Program[Either[A,B]]) = ???
+    }
+
+    it("should work with Program"){
+      test[Program](2) should matchPattern {
+        case DoAndThen(Returns("2"), f) =>
+      }
+    }
   }
 
 
