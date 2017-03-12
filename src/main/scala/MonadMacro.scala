@@ -20,17 +20,19 @@ coverage for typical use cases that allows us to illustrate our claim.
 object monad{
   import cats.Monad
 
+  /*
+  Dirty trick to unlift programs. Not intended to be executed ever, 
+  but inside `monad` macro blocks.
+  */
+  implicit class RunOp[P[_],A](program: P[A]){
+    def run: A = ??? 
+  }
+
   /* 
   This macro allows us to transform a block of conventional imperative code
   into an imperative program over monad `P`
   */
   def apply[P[_]: Monad,T](t: T): P[T] = macro impl[P,T]
-
-  implicit def c[P[_],A](p: P[A]): A = p.asInstanceOf[A]
-
-  implicit class RunOp[P[_],A](program: P[A]){
-    def run: A = ??? // not intended to be executed ever, but inside monad macro blocks
-  }
 
   def impl[P[_], T](
     c: whitebox.Context)(
