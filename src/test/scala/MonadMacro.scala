@@ -80,8 +80,8 @@ class MonadMacro extends FunSpec with Matchers with Inside{
   }
 
   /** 
-  What if our pure function has to deal with programs)?
-  Then, we simulate that we execute then using a fake `run`method.
+  What if our pure function has to deal with programs?
+  Then, we simulate their execution using a fake `run` method.
   */
   describe("Simple example with .run"){
 
@@ -104,7 +104,7 @@ class MonadMacro extends FunSpec with Matchers with Inside{
   /** 
    If our monadic program needs access to instructions
    of particular APIs (which is the normal case), we can 
-   also use the `.run´ trick.
+   also use the `.run` trick.
    */
   describe("Monadic programs over particular APIs"){
     import cats.Id
@@ -172,13 +172,14 @@ class MonadMacro extends FunSpec with Matchers with Inside{
         (IOState(List(),List("hi!")),"hi!")
     }
 
-    def test2[P[_]: Monad: IO](): P[String] = monad{
-      val msg: String = read().run
-      write(msg).run
-      msg
-    }
-
     it("should work when no ValDef is used as well"){
+      
+      def test2[P[_]: Monad: IO](): P[String] = monad{
+        val msg: String = read().run
+        write(msg).run
+        msg
+      }
+      
       test2[IOState.Action]().run(IOState(List("hi!"),List())).value shouldBe
         (IOState(List(),List("hi!")),"hi!")
     }    
