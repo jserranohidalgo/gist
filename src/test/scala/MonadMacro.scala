@@ -2,11 +2,18 @@ package org.hablapps.gist
 
 import org.scalatest._
 
+/**
+Some tests for the `monad` macro. Run these tests as follows:
 
+  test-only org.hablapps.gist.MonadMacro
+
+*/
 class MonadMacro extends FunSpec with Matchers with Inside{
   import cats.Monad
 
-
+  /** 
+   This is a simple program with just one "return" instruction.
+   */
   describe("Simple pure translation"){
 
     def test[P[_]: Monad](i: Int): P[Int] = monad{
@@ -25,6 +32,9 @@ class MonadMacro extends FunSpec with Matchers with Inside{
   }
 
 
+  /** 
+   Simple program with several nested `flatMap`s
+   */
   describe("Several simple flatMaps"){
 
     def test[P[_]: Monad](i: Int): P[Int] = monad{
@@ -33,37 +43,32 @@ class MonadMacro extends FunSpec with Matchers with Inside{
       j+1
     }
 
-    // Option
-
     it("should work with Option"){
       import cats.instances.option._
       test[Option](2) shouldBe Some(4)
     }
-
-    // Id
 
     it("should work with Id"){
       import cats.Id
       test[Id](2) shouldBe 4
     }
 
-    // Program
+    it("should work with reified programs"){
+      
+      abstract class Program[_]
+      case class Returns[A](a: A) extends Program[A]
+      case class DoAndThen[A,B](a: Program[A],
+        f: A => Program[B]) extends Program[B]
 
-    abstract class Program[_]
-    case class Returns[A](a: A) extends Program[A]
-    case class DoAndThen[A,B](a: Program[A],
-      f: A => Program[B]) extends Program[B]
-
-    object Program{
-      implicit val M = new Monad[Program]{
-        def pure[A](a: A) = Returns(a)
-        def flatMap[A,B](p: Program[A])(f: A => Program[B]) =
-          DoAndThen(p,f)
-        def tailRecM[A,B](a: A)(f: A => Program[Either[A,B]]) = ???
+      object Program{
+        implicit val M = new Monad[Program]{
+          def pure[A](a: A) = Returns(a)
+          def flatMap[A,B](p: Program[A])(f: A => Program[B]) =
+            DoAndThen(p,f)
+          def tailRecM[A,B](a: A)(f: A => Program[Either[A,B]]) = ???
+        }
       }
-    }
-
-    it("should work with Program"){
+      
       inside(test[Program](2)) {
         case DoAndThen(Returns("2"), f) =>
           inside(f("2")) {
@@ -74,6 +79,10 @@ class MonadMacro extends FunSpec with Matchers with Inside{
     }
   }
 
+  /** 
+  What if our pure function has to deal with programs)?
+  Then, we simulate that we execute then using a fake `run`method.
+  */
   describe("Simple example with .run"){
 
     import monad._
@@ -92,8 +101,15 @@ class MonadMacro extends FunSpec with Matchers with Inside{
 
   }
 
-  describe("Sime example with additional APIs"){
+  /** 
+   If our monadic program needs access to instructions
+   of particular APIs (which is the normal case), we can 
+   also use the `.run´ trick.
+   */
+  describe("Monadic programs over particular APIs"){
     import cats.Id
+
+    // IO Algebra
 
     trait IO[P[_]]{
       def read(): P[String]
@@ -106,30 +122,66 @@ class MonadMacro extends FunSpec with Matchers with Inside{
         def write[P[_]](msg: String)(implicit IO: IO[P]) = IO.write(msg)
       }
 
+      // Side-effectful interpretation
       implicit object IOId extends IO[Id]{
         def read() = scala.io.StdIn.readLine()
         def write(msg: String) = println(msg)
       }
     }
 
-    import IO.Syntax._, monad._
+    // Simple state transformation for purely functional testing
 
-    // Doesn't really work now
-    def test1[P[_]: Monad: IO](): P[String] = monad{
-      val msg: String = read[Id]()
-      val _  = write[Id](msg)
-      msg
+    case class IOState(toBeRead: List[String], written: List[String])
+
+    object IOState{
+      import cats.data.State
+
+      type Action[T] = State[IOState,T]
+
+      implicit object IOAction extends IO[Action]{
+        def read(): Action[String] =
+          for {
+            s <- State.get
+            _ <- State.set(s.copy(toBeRead = s.toBeRead.tail))
+          } yield s.toBeRead.head
+
+        def write(msg: String): Action[Unit] =
+          State.modify{ s =>
+            s.copy(written = msg :: s.written)
+          }
+      }
     }
+
+    // Sample program
+
+    import IO.Syntax._, monad._
 
     def test[P[_]: Monad: IO](): P[String] = monad{
       val msg: String = read().run
-      val _  = write(msg).run
+      val _ : Unit = write(msg).run
       msg
     }
 
-    it("should work with IO"){
-      test[Id]() shouldBe "hi!"
+    it("should work with Id"){
+      // Uncomment to be prompted at the console
+      // test[Id]() shouldBe "hi!"
     }
+
+    it("should work with State"){
+      test[IOState.Action]().run(IOState(List("hi!"),List())).value shouldBe
+        (IOState(List(),List("hi!")),"hi!")
+    }
+
+    def test2[P[_]: Monad: IO](): P[String] = monad{
+      val msg: String = read().run
+      write(msg).run
+      msg
+    }
+
+    it("should work when no ValDef is used as well"){
+      test2[IOState.Action]().run(IOState(List("hi!"),List())).value shouldBe
+        (IOState(List(),List("hi!")),"hi!")
+    }    
   }
 
 
