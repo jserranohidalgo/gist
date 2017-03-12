@@ -6,13 +6,13 @@ import scala.language.experimental.macros
 /*
 This gist implements a macro to write monadic programs without using
 neither explicit `flatMap`s nor for-comprehensions, but conventional 
-`val` definitions, semicolons and `return` expressions. We wrote this 
-macro just with a didactic purpose: showing that monadic code is 
-simple imperative code. This is so much true that the conventional 
-imperative syntax of Scala can be used to write monadic code. 
-You can find some examples in the following file.
+`val` definitions and semicolons. We wrote this macro just with a 
+didactic purpose: showing that monadic code is simple imperative code. 
+This is so true that the conventional imperative syntax of Scala can 
+be used to write monadic code. You can find some examples in the 
+following file.
 
-https://github.com/hablapps/gist/blob/master/src/test/scala/ADTs.scala
+https://github.com/hablapps/gist/blob/master/src/test/scala/MonadMacro.scala
 
 Last, note that this macro is far from being complete. We just included
 coverage for typical use cases that allows us to illustrate our claim. 
@@ -61,12 +61,10 @@ object monad{
             q"$M.flatMap($liftedValue){ $name: $tpe => $liftedTail }"
         }
 
-      val untypeT = c.untypecheck(t.tree)
-
-      val r: Tree = liftBlock(untypeT match {
-        case b: Block => b
-        case e => Block(List(),e)
-      })
+      val r: Tree = c.untypecheck(t.tree) match {
+        case b: Block => liftBlock(b)
+        case e => liftValue(e)
+      }
 
       c.Expr[P[T]](r)
     }
