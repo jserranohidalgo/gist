@@ -15,9 +15,10 @@ addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.3")
 addCompilerPlugin("org.scalamacros" %% "paradise" % "2.1.0" cross CrossVersion.full)
 
 resolvers ++= Seq(
-  "Speech repo - releases" at "http://repo.hablapps.com/releases")
+  "Habla repo - releases" at "http://repo.hablapps.com/releases")
 
 libraryDependencies ++= Seq(
+  "org.hablapps" %% "puretest-cats" % "0.2-SNAPSHOT",
   "org.scalatest" %% "scalatest" % "3.0.0",
   "org.typelevel" %% "cats" % "0.9.0",
   "com.typesafe.akka" %% "akka-http-experimental" % "2.4.11",
