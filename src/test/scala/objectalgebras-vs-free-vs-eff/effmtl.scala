@@ -15,6 +15,11 @@ class EffMTL extends FunSpec with Matchers{
     def write(msg: String): P[Unit]
   }
 
+  object IO{
+    sealed abstract class Error
+    case class NotEnoughInput() extends Error
+  }
+
   import cats.FlatMap, cats.Applicative
 
   /* LOGIC */
@@ -36,7 +41,7 @@ class EffMTL extends FunSpec with Matchers{
   def echo[P[_]: FlatMap: Applicative]()(implicit
     E: Error[P,EchoError], IO: IO[P]): P[Unit] =
     IO.read() >>=
-    (checkNotNumber[P] *> checkLength[P]).run >>=
+    (checkNotNumber[P] *> checkLength[P](3)).run >>=
     (IO.write _)
 
   import cats.syntax.applicative._
@@ -50,28 +55,30 @@ class EffMTL extends FunSpec with Matchers{
       }
     }
 
-  def checkLength[P[_]: Applicative](implicit
+  def checkLength[P[_]: Applicative](min: Int)(implicit
     E: Error[P,EchoError]): Kleisli[P,String,String] =
     Kleisli{ msg =>
-      if (msg.length <= 2) E.raise(NonEmptyList.of(TooShort(msg.length)))
+      if (msg.length < min) E.raise(NonEmptyList.of(TooShort(msg.length)))
       else msg.pure[P]
     }
 
   /* TESTS */
 
   import org.hablapps.puretest._,
-    scalatestImpl._,
-    ProgramStateMatchers.Syntax._
+    scalatestImpl._
 
-  def test[P[_]
+  def testEcho[P[_]
     : FlatMap
     : Applicative
     : IO
     : Error[?[_],EchoError]
     : StateTester[?[_],IOState,EchoError]]: Unit = {
 
+    import ProgramStateMatchers.Syntax._
+
     it("Echo with enough input"){
-      echo[P]() should from[P](IOState(List("hi"),List())).runWithoutErrors
+      echo[P]() should from(IOState(List("hi"),List()))
+        .runWithoutErrors
     }
 
     it("Echo without input"){
@@ -91,6 +98,24 @@ class EffMTL extends FunSpec with Matchers{
           TooShort(1)))
     }
   }
+
+  def testCheckLength[P[_]
+    : Applicative
+    : Error[?[_],EchoError]
+    : Tester[?[_],EchoError]]: Unit = {
+
+    import ProgramMatchers.Syntax._
+
+    it("Right length"){
+      checkLength[P](3).apply("999") should runWithoutErrors
+      checkLength[P](3).apply("999") should beEqualTo("999")
+    }
+
+    it("Wrong length"){
+      checkLength(3).apply("3") should failWith(NonEmptyList.of(TooShort(1)): EchoError)
+    }
+  }
+
 
   /* INSTANCES */
 
@@ -119,10 +144,21 @@ class EffMTL extends FunSpec with Matchers{
 
   import cats.data.Validated
 
-  def ValidatedError[E] = new Error[Validated[E,?],E]{
+  implicit def ValidatedError[E] = new Error[Validated[E,?],E]{
     def raise[A](e: E): Validated[E,A] =
       Validated.invalid(e)
   }
+
+  describe("Validated for checking length"){
+    testCheckLength[Validated[EchoError,?]]
+  }
+
+  /* Composition */
+
+
+  /* Compound instance */ 
+
+
 
 
 }
