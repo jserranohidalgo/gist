@@ -16,6 +16,8 @@ class EffMTL extends FunSpec with Matchers{
   }
 
   object IO{
+    def apply[P[_]](implicit IO: IO[P]) = IO
+
     sealed abstract class Error
     case class NotEnoughInput() extends Error
   }
@@ -99,6 +101,23 @@ class EffMTL extends FunSpec with Matchers{
     }
   }
 
+  def testPlainIO[P[_]
+    : IO
+    : FlatMap 
+    : StateTester[?[_],IOState,IO.Error]]: Unit = {
+      import ProgramStateMatchers.Syntax._
+      import cats.syntax.flatMap._
+
+      IO[P].read() should from(IOState(List("hi"),List()))
+        .beEqualTo("hi")
+
+      IO[P].read() should from(IOState(List(),List()))
+        .failWith(IO.NotEnoughInput(): IO.Error)
+
+      (IO[P].read() >>= IO[P].write) should from(IOState(List("hi"),List()))
+        .runWithoutErrors
+    }
+
   def testCheckLength[P[_]
     : Applicative
     : Error[?[_],EchoError]
@@ -124,20 +143,27 @@ class EffMTL extends FunSpec with Matchers{
   case class IOState(toBeRead: List[String], written: List[String])
 
   import cats.data.StateT
+  import cats.instances.either._
 
-  type IOAction[A] = StateT[Option,IOState,A]
+  type IOAction[A] = StateT[Either[IO.Error,?],IOState,A]
 
-  import cats.instances.option._
+  implicit object IOActionIO extends IO[IOAction]{
 
-  object IOActionIO extends IO[IOAction]{
-    def read(): IOAction[String] = StateT[Option,IOState,String]{
-      case IOState(head::tail,w) => Option((IOState(tail,w),head))
-      case _ => None
+    def read(): IOAction[String] = StateT[Either[IO.Error,?],IOState,String]{
+      case IOState(head::tail,w) => 
+        Right((IOState(tail,w),head))
+      case _ =>
+        Left(IO.NotEnoughInput())
     }
 
     def write(msg: String): IOAction[Unit] = StateT{
-      case IOState(r,w) => Some((IOState(r,msg::w),()))
+      case IOState(r,w) => 
+        Right((IOState(r,msg::w),()))
     }
+  }
+
+  describe("Test simple fail-fast IO programs"){
+    testPlainIO[IOAction]
   }
 
   /* Error */
@@ -152,9 +178,6 @@ class EffMTL extends FunSpec with Matchers{
   describe("Validated for checking length"){
     testCheckLength[Validated[EchoError,?]]
   }
-
-  /* Composition */
-
 
   /* Compound instance */ 
 
