@@ -179,6 +179,18 @@ class EffMTL extends FunSpec with Matchers{
     testCheckLength[Validated[EchoError,?]]
   }
 
+  describe("Compound validation"){
+    import ProgramMatchers.Syntax._
+
+    it("should catch both errors"){
+      (checkLength[Validated[EchoError,?]](3) *> 
+       checkNotNumber[Validated[EchoError,?]]).run("9") should 
+        failWith[
+        Validated[EchoError,?]](
+        NonEmptyList.of(TooShort(1),IsNumber(9)): EchoError)
+    }
+  }
+
   /* Compound instance */ 
 
 
