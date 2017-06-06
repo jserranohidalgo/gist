@@ -79,7 +79,7 @@ class EffMTL extends FunSpec with Matchers{
     import ProgramStateMatchers.Syntax._
 
     it("Echo with enough input"){
-      echo[P]() should from(IOState(List("hi"),List()))
+      echo[P]() should from(IOState(List("hii"),List()))
         .runWithoutErrors
     }
 
@@ -96,7 +96,7 @@ class EffMTL extends FunSpec with Matchers{
     it("Echo with wrong input with several errors"){
       echo[P]() should from(IOState(List("9"),List()))
         .failWith(NonEmptyList.of(
-          IsNumber(999): SingleError,
+          IsNumber(9): SingleError,
           TooShort(1)))
     }
   }
@@ -108,15 +108,21 @@ class EffMTL extends FunSpec with Matchers{
       import ProgramStateMatchers.Syntax._
       import cats.syntax.flatMap._
 
+    it("should work with right IO state with simple IO instruction"){
       IO[P].read() should from(IOState(List("hi"),List()))
         .beEqualTo("hi")
+    }
 
-      IO[P].read() should from(IOState(List(),List()))
-        .failWith(IO.NotEnoughInput(): IO.Error)
-
+    it("shoud work with monadic programs"){
       (IO[P].read() >>= IO[P].write) should from(IOState(List("hi"),List()))
         .runWithoutErrors
     }
+
+    it("should fail with insufficient input"){
+      IO[P].read() should from(IOState(List(),List()))
+        .failWith(IO.NotEnoughInput(): IO.Error)
+    }
+  }
 
   def testCheckLength[P[_]
     : Applicative
@@ -175,25 +181,62 @@ class EffMTL extends FunSpec with Matchers{
       Validated.invalid(e)
   }
 
-  describe("Validated for checking length"){
+  describe("Test Validated programs"){
     testCheckLength[Validated[EchoError,?]]
-  }
 
-  describe("Compound validation"){
     import ProgramMatchers.Syntax._
 
     it("should catch both errors"){
       (checkLength[Validated[EchoError,?]](3) *> 
        checkNotNumber[Validated[EchoError,?]]).run("9") should 
-        failWith[
-        Validated[EchoError,?]](
-        NonEmptyList.of(TooShort(1),IsNumber(9)): EchoError)
+        failWith[Validated[EchoError,?]](
+          NonEmptyList.of(TooShort(1),IsNumber(9)): EchoError)
     }
   }
 
   /* Compound instance */ 
 
+  import cats.data.State
+  import Validated._
 
+  type IOValidatedAction[A] = State[IOState,Validated[EchoError,A]]
 
+  implicit object IOValidatedActionIO extends IO[IOValidatedAction]{
+
+    def read(): IOValidatedAction[String] = State{
+      case IOState(head::tail,w) => 
+        (IOState(tail,w),valid(head))
+      case st =>
+        (st, invalid(NonEmptyList.of(NotEnoughInput()): EchoError))
+    }
+
+    def write(msg: String): IOValidatedAction[Unit] = State{
+      case IOState(r,w) => 
+        (IOState(r,msg::w),valid(()))
+    }
+  }
+
+  implicit object IOValidatedActionError extends Error[IOValidatedAction,EchoError]{
+    def raise[A](e: EchoError) = State{
+      st => (st, invalid(e))
+    }
+  }
+
+  describe("Test echo programs with validation and io effects"){
+
+    implicit def StateTStateTester[E, F[_]: Tester[?[_], E], S] =
+      new StateTester[λ[t=>State[S, F[t]]], S, E] {
+        def apply(state: S) = new Tester[λ[t=>State[S, F[t]]], E]{
+          def apply[T](s: State[S, F[T]]): Either[E, T] =
+            Tester[F, E].apply(s.runA(state).value)
+        }
+      }
+
+    testEcho[IOValidatedAction](StateValidatedMonad[NonEmptyList[SingleError],IOState],
+      StateValidatedMonad[NonEmptyList[SingleError],IOState],
+      IOValidatedActionIO,
+      IOValidatedActionError,
+      implicitly)
+  }
 
 }
