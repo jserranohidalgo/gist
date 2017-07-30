@@ -87,7 +87,9 @@ class AbstractingEitherT extends FunSpec with Matchers{
       // In this case syntax doesn't help a lot ... 
       import cats.syntax.applicative._, cats.syntax.applicativeError._, cats.syntax.flatMap._
 
-      def fooWithSyntax[P[_]: MonadError[?[_],Throwable]: MyAPI](i: Int): P[String] = 
+      type MonadErrorT[P[_]] = MonadError[P,Throwable]
+
+      def fooWithSyntax[P[_]: MonadErrorT: MyAPI](i: Int): P[String] = 
         MyAPI[P].bar() >>= { j => 
           if ((j-i)>=0) "ok".pure[P]
           else (NegativeNumber(j-i): Throwable).raiseError[P,String]
