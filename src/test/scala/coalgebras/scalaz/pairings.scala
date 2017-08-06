@@ -26,6 +26,35 @@ class Pairings extends FunSpec with Matchers{
     }
   }
 
+  import scalaz.Free, scalaz.Cofree, scalaz.State, scalaz.Functor
+  trait FreeCofreePairing[F[_],G[_]]{
+    val P: Pairing[F,G]
+    implicit val F: Functor[F]
+
+    def pair[X,Y,R](f: X => Y => R): Free[F,X] => State[Cofree[G,Y],R] =
+      _.fold( 
+        x => State.gets(c => f(x)(c.extract)),
+        ff => State.get.flatMap{ c => 
+          P.pair[Free[F,X],Cofree[G,Y],State[Cofree[G,Y],R]](
+            f2 => cf2 => State.put(cf2).flatMap(_ => pair(f)(f2)))(ff)(c.tail) 
+        }
+      )
+  }
+
+  object FreeCofreePairing{
+    def apply[F[_],G[_]](implicit P: FreeCofreePairing[F,G]) = P
+
+    implicit def fromPairing[F[_],G[_]](implicit _P: Pairing[F,G], _F: Functor[F]) = new FreeCofreePairing[F,G]{
+      val P = _P
+      val F = _F
+    }
+
+    def StandardPairing[F[_],G[_]](implicit FCP: FreeCofreePairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
+      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R = 
+        ff => cg => FCP.pair(f)(ff).eval(cg)
+    }
+  }
+
   object Collazt{
 
     sealed abstract class UpDown[T]
@@ -75,32 +104,49 @@ class Pairings extends FunSpec with Matchers{
       def execute[S,T](program: Free[Two,S => T]): Cofree[UpDown,S] => T = 
         Pairing[Free[Two,?],Cofree[UpDown,?]].pair[S=>T,S,T](f => a => f(a))(program)
 
+      def executeState[S,T](program: Free[Two,S => T]): State[Cofree[UpDown,S],T] = 
+        FreeCofreePairing[Two,UpDown].pair[S=>T,S,T](f => a => f(a))(program)
+
     }
   }
 
   describe("Collazt machine running"){
     import Collazt._
 
+    sealed abstract class Direction
+    case object WentUp extends Direction
+    case object WentDown extends Direction
+
+    import scalaz.Free
+    def choose: Free[Two,Direction] = 
+      Free.roll(Two(Free.pure(WentUp), Free.pure(WentDown)))
+
+    val ex1: Free[Two, Integer => String] = for {
+      d1 <- choose
+      d2 <- choose
+    } yield if (d1 == WentDown && d2 == WentDown) (i => "Went down twice " + i) else (_.toString)
+    
     it("should work on program ex1"){
-
-      sealed abstract class Direction
-      case object WentUp extends Direction
-      case object WentDown extends Direction
-
-      import scalaz.Free
-      def choose: Free[Two,Direction] = 
-        Free.roll(Two(Free.pure(WentUp), Free.pure(WentDown)))
-
-      val ex1: Free[Two, Integer => String] = for {
-        d1 <- choose
-        d2 <- choose
-      } yield if (d1 == WentDown && d2 == WentDown) (i => "Went down twice " + i) else (_.toString)
-
       Two.execute(choose.map(d => (_ : Integer) => d))(memoiseCollatz(12)) shouldBe WentDown
 
       Two.execute(ex1)(memoiseCollatz(12)) shouldBe "Went down twice 3"
 
       Two.execute(ex1)(memoiseCollatz(6)) shouldBe "10"
+    }
+
+    it("should work with surplus cofree"){
+      val machineState1 = memoiseCollatz(12)
+
+      val (machineState2, result1) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState1)
+      result1 shouldBe WentDown
+
+      val (machineState3, result2) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState2)
+      result2 shouldBe WentDown
+
+      val (machineState4, result3) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState3)
+      result3 shouldBe WentUp
+
+      Two.executeState(ex1).eval(machineState4) shouldBe "16"
     }
   }
 }
