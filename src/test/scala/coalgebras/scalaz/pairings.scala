@@ -26,7 +26,7 @@ class Pairings extends FunSpec with Matchers{
     }
   }
 
-  import scalaz.Free, scalaz.Cofree, scalaz.State, scalaz.Functor
+  import scalaz.Free, scalaz.Cofree, scalaz.State, scalaz.Functor, scalaz.syntax.monad._
   trait FreeCofreePairing[F[_],G[_]]{
     val P: Pairing[F,G]
     implicit val F: Functor[F]
@@ -34,9 +34,9 @@ class Pairings extends FunSpec with Matchers{
     def pair[X,Y,R](f: X => Y => R): Free[F,X] => State[Cofree[G,Y],R] =
       _.fold( 
         x => State.gets(c => f(x)(c.extract)),
-        ff => State.get.flatMap{ c => 
+        ff => State.get[Cofree[G,Y]] >>= { c => 
           P.pair[Free[F,X],Cofree[G,Y],State[Cofree[G,Y],R]](
-            f2 => cf2 => State.put(cf2).flatMap(_ => pair(f)(f2)))(ff)(c.tail) 
+            f2 => cf2 => State.put(cf2) >> pair(f)(f2))(ff)(c.tail) 
         }
       )
   }
@@ -76,6 +76,13 @@ class Pairings extends FunSpec with Matchers{
     import scalaz.Functor, scalaz.Cofree
     def unfoldMap[G[_]: Functor,A,B](coalg: A => G[A])(color: A => B): A => Cofree[G,B] =
       a => Cofree.delay(color(a), Functor[G].map(coalg(a))(unfoldMap(coalg)(color)))
+
+    import scalaz.syntax.functor._
+    def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): Cofree[λ[t => Option[G[t]]],B] = 
+      Cofree[λ[t => Option[G[t]]],B](b, 
+        values.seq.foldRight[Option[G[Cofree[λ[t => Option[G[t]]],B]]]](Option.empty){
+          case (g,cf) => Some(g map { b1 => Cofree[λ[t => Option[G[t]]],B](b1,cf)})
+        })
 
     def collazt(n: Integer): UpDown[Integer] = 
       if (n % 2 == 0) Down(n/2)
@@ -147,6 +154,23 @@ class Pairings extends FunSpec with Matchers{
       result3 shouldBe WentUp
 
       Two.executeState(ex1).eval(machineState4) shouldBe "16"
+    }
+
+    it("should work with ad-hoc history"){
+      import Collazt._
+
+      val machineState1 = unfoldAdHoc[Integer,UpDown](12,Down(6),Down(3),Up(10))
+
+      val (machineState2, result1) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState1)
+      result1 shouldBe WentDown
+
+      val (machineState3, result2) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState2)
+      result2 shouldBe WentDown
+
+      // val (machineState4, result3) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState3)
+      // result3 shouldBe WentUp
+
+      // Two.executeState(ex1).eval(machineState4) shouldBe "16"
     }
   }
 }
