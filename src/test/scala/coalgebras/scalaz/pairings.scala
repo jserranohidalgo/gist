@@ -1,5 +1,7 @@
 package org.hablapps.gist
 
+import scalaz._, Scalaz._
+
 import org.scalatest._
 
 class Pairings extends FunSpec with Matchers{
@@ -17,8 +19,6 @@ class Pairings extends FunSpec with Matchers{
         // e => p => Function.uncurried(e andThen f).tupled(p)
     }
 
-    import scalaz.Free, scalaz.Cofree, scalaz.Functor
-
     implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
       def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R = 
         _.fold( x => c => f(x)(c.extract),
@@ -26,7 +26,6 @@ class Pairings extends FunSpec with Matchers{
     }
   }
 
-  import scalaz.Free, scalaz.Cofree, scalaz.State, scalaz.Functor, scalaz.syntax.monad._
   trait FreeCofreePairing[F[_],G[_]]{
     val P: Pairing[F,G]
     implicit val F: Functor[F]
@@ -62,7 +61,6 @@ class Pairings extends FunSpec with Matchers{
     case class Down[T](t: T) extends UpDown[T]
 
     object UpDown{
-      import scalaz.Functor 
       implicit def upDownFunctor[T] = new Functor[UpDown]{
         def map[A,B](u: UpDown[A])(f: A => B): UpDown[B] = u match {
           case Up(a) => Up(f(a))
@@ -73,11 +71,9 @@ class Pairings extends FunSpec with Matchers{
       type Cofree[T] = scalaz.Cofree[UpDown,T]
     }
 
-    import scalaz.Functor, scalaz.Cofree
     def unfoldMap[G[_]: Functor,A,B](coalg: A => G[A])(color: A => B): A => Cofree[G,B] =
       a => Cofree.delay(color(a), Functor[G].map(coalg(a))(unfoldMap(coalg)(color)))
 
-    import scalaz.syntax.functor._
     def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): Cofree[λ[t => Option[G[t]]],B] = 
       Cofree[λ[t => Option[G[t]]],B](b, 
         values.seq.foldRight[Option[G[Cofree[λ[t => Option[G[t]]],B]]]](Option.empty){
@@ -107,7 +103,6 @@ class Pairings extends FunSpec with Matchers{
         }
       }
 
-      import scalaz.Free, scalaz.Cofree
       def execute[S,T](program: Free[Two,S => T]): Cofree[UpDown,S] => T = 
         Pairing[Free[Two,?],Cofree[UpDown,?]].pair[S=>T,S,T](f => a => f(a))(program)
 
@@ -124,7 +119,6 @@ class Pairings extends FunSpec with Matchers{
     case object WentUp extends Direction
     case object WentDown extends Direction
 
-    import scalaz.Free
     def choose: Free[Two,Direction] = 
       Free.roll(Two(Free.pure(WentUp), Free.pure(WentDown)))
 
@@ -156,21 +150,172 @@ class Pairings extends FunSpec with Matchers{
       Two.executeState(ex1).eval(machineState4) shouldBe "16"
     }
 
-    it("should work with ad-hoc history"){
-      import Collazt._
+    // it("should work with ad-hoc history"){
+    //   import Collazt._
 
-      val machineState1 = unfoldAdHoc[Integer,UpDown](12,Down(6),Down(3),Up(10))
+    //   val machineState1 = unfoldAdHoc[Integer,UpDown](12,Down(6),Down(3),Up(10))
 
-      val (machineState2, result1) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState1)
-      result1 shouldBe WentDown
+    //   val (machineState2, result1) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState1)
+    //   result1 shouldBe WentDown
 
-      val (machineState3, result2) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState2)
-      result2 shouldBe WentDown
+    //   val (machineState3, result2) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState2)
+    //   result2 shouldBe WentDown
 
-      // val (machineState4, result3) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState3)
-      // result3 shouldBe WentUp
+    //   // val (machineState4, result3) = Two.executeState(choose.map(d => (_ : Integer) => d))(machineState3)
+    //   // result3 shouldBe WentUp
 
-      // Two.executeState(ex1).eval(machineState4) shouldBe "16"
+    //   // Two.executeState(ex1).eval(machineState4) shouldBe "16"
+    // }
+  }
+
+  object IOCoalgebras{
+
+    // UpDown coalgebra
+
+    sealed abstract class UpDown
+    case object Up extends UpDown
+    case object Down extends UpDown
+
+    trait UpDownAlg[P[_]]{
+      def next(): P[UpDown]
+      def current(): P[Int]
+    }
+
+    type UpDownMachine[S] = UpDownAlg[State[S,?]]
+
+    object Collatz extends UpDownMachine[Int]{
+      def next(): State[Int,UpDown] = State{ n => 
+        if (n % 2 ==0) (n/2,Down)
+        else (3*n+1,Up)
+      }
+      def current(): State[Int,Int] = State.get
+    }
+
+    def ex1[P[_]: Monad](implicit UD: UpDownAlg[P]): P[String] = for{
+      d1 <- UD.next()
+      d2 <- UD.next()
+      current <- UD.current()
+    } yield if (d1==Down & d2==Down) s"Went down twice $current" else s"$current"
+
+  }
+
+  describe("IOCoalgebra for Collatz"){
+    import IOCoalgebras._
+
+    it("should work for ex1"){
+      ex1(Monad[State[Int,?]],Collatz).eval(12) shouldBe "Went down twice 3"
+      ex1(Monad[State[Int,?]],Collatz).eval(6) shouldBe "10"
+    }
+
+  }
+
+  
+  type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
+
+  trait IOCoChurch[Alg[_[_]],F[_]]{
+    type S
+    val coalg: IOCoalgebra[Alg,F,S]
+    val current: S
+  }
+
+  object IOCoChurch{
+
+    def apply[Alg[_[_]],F[_],_S](_coalg: IOCoalgebra[Alg,F,_S], _current: _S) = new IOCoChurch[Alg,F]{
+      type S = _S
+      val coalg = _coalg
+      val current = _current
+    }
+
+    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] = 
+      apply(coalg,_)
+
+    // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
+    //   ???      
+    // }
+  }
+
+  trait Church[Alg[_[_]],T]{
+    def fold[P[_]: Alg: Monad]: P[T]
+  }
+
+  object Church{
+
+    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F = 
+      λ[Church[Alg,?]~>F]{
+        _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
+      }
+  }
+
+  describe("Collatz with church and cochurch"){
+    import IOCoalgebras._
+  
+    it("should work"){
+      val ex1Church = new Church[UpDownAlg,String]{
+        def fold[P[_]: UpDownAlg: Monad] = ex1[P]
+      }
+      Church.run(IOCoChurch[UpDownAlg,Id,Int](Collatz, 12)).apply(ex1Church) shouldBe "Went down twice 3"
     }
   }
+
+
+  object PairingDLaing{
+
+    trait Adder[P[_]]{
+      def add(i: Int): P[Boolean]
+      def clear(): P[Unit]
+      def total(): P[Int]
+    }
+
+    case class AdderState(limit: Int, current: Int)
+
+    object AdderState{
+      implicit object AdderStateI extends Adder[State[AdderState,?]]{
+        def add(i: Int): State[AdderState,Boolean] = State{
+          case s@AdderState(total,current) => 
+            if (current + i > total) (s,true)
+            else (AdderState(total, current+i),false)
+        }
+        def clear() = State.modify(_.copy(current=0))
+        def total() = State.gets(_.current)
+      }
+    }
+
+  
+    def findLimit[P[_]: Monad](implicit A: Adder[P]): P[Int] = for{
+      total <- A.total()
+      _ <- A.clear()
+      limit <- findLimitAux[P]
+      _ <- A.clear
+      _ <- A.add(total)
+    } yield limit
+
+    def findLimitAux[P[_]: Monad](implicit A: Adder[P]): P[Int] = for {
+      overflow <- A.add(1)
+      limit <- if (overflow) A.total() else findLimitAux[P]
+    } yield limit
+
+  }
+
+  describe("Adder"){
+    import PairingDLaing._
+
+    it("should work"){
+      val findLimitChurch = new Church[Adder,Int]{
+        def fold[P[_]: Adder: Monad] = findLimit[P]
+      }
+       
+      Church.run(IOCoChurch[Adder,Id,AdderState](
+        AdderState.AdderStateI, AdderState(10,0))).apply(findLimitChurch) shouldBe 10
+    }
+  }
+
+
+
+
+
+
+
+
+
+
 }
