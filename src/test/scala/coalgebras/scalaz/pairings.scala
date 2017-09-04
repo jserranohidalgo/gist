@@ -5,7 +5,7 @@ import scalaz._, Scalaz._
 import org.scalatest._
 
 class Pairings extends FunSpec with Matchers{
-  
+
   trait Pairing[P[_],Q[_]]{
     def pair[X,Y,R](f: X => Y => R): P[X] => Q[Y] => R
   }
@@ -14,13 +14,13 @@ class Pairings extends FunSpec with Matchers{
     def apply[P[_],Q[_]](implicit P: Pairing[P,Q]) = P
 
     implicit def ExpProductPairing[A] = new Pairing[A => ?,(A,?)]{
-      def pair[X,Y,R](f: X => Y => R): (A => X) => ((A,Y)) => R = 
+      def pair[X,Y,R](f: X => Y => R): (A => X) => ((A,Y)) => R =
         e => p => f(e(p._1))(p._2)
         // e => p => Function.uncurried(e andThen f).tupled(p)
     }
 
     implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
-      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R = 
+      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
         _.fold( x => c => f(x)(c.extract),
           ff => c => p.pair(pair(f))(ff)(c.tail))
     }
@@ -31,11 +31,11 @@ class Pairings extends FunSpec with Matchers{
     implicit val F: Functor[F]
 
     def pair[X,Y,R](f: X => Y => R): Free[F,X] => State[Cofree[G,Y],R] =
-      _.fold( 
+      _.fold(
         x => State.gets(c => f(x)(c.extract)),
-        ff => State.get[Cofree[G,Y]] >>= { c => 
+        ff => State.get[Cofree[G,Y]] >>= { c =>
           P.pair[Free[F,X],Cofree[G,Y],State[Cofree[G,Y],R]](
-            f2 => cf2 => State.put(cf2) >> pair(f)(f2))(ff)(c.tail) 
+            f2 => cf2 => State.put(cf2) >> pair(f)(f2))(ff)(c.tail)
         }
       )
   }
@@ -49,7 +49,7 @@ class Pairings extends FunSpec with Matchers{
     }
 
     def StandardPairing[F[_],G[_]](implicit FCP: FreeCofreePairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
-      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R = 
+      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
         ff => cg => FCP.pair(f)(ff).eval(cg)
     }
   }
@@ -67,24 +67,24 @@ class Pairings extends FunSpec with Matchers{
           case Down(a) => Down(f(a))
         }
       }
-  
+
       type Cofree[T] = scalaz.Cofree[UpDown,T]
     }
 
     def unfoldMap[G[_]: Functor,A,B](coalg: A => G[A])(color: A => B): A => Cofree[G,B] =
       a => Cofree.delay(color(a), Functor[G].map(coalg(a))(unfoldMap(coalg)(color)))
 
-    def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): Cofree[λ[t => Option[G[t]]],B] = 
-      Cofree[λ[t => Option[G[t]]],B](b, 
+    def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): Cofree[λ[t => Option[G[t]]],B] =
+      Cofree[λ[t => Option[G[t]]],B](b,
         values.seq.foldRight[Option[G[Cofree[λ[t => Option[G[t]]],B]]]](Option.empty){
           case (g,cf) => Some(g map { b1 => Cofree[λ[t => Option[G[t]]],B](b1,cf)})
         })
 
-    def collazt(n: Integer): UpDown[Integer] = 
+    def collazt(n: Integer): UpDown[Integer] =
       if (n % 2 == 0) Down(n/2)
       else Up(3*n + 1)
 
-    def memoiseCollatz(n: Integer): UpDown.Cofree[Integer] = 
+    def memoiseCollatz(n: Integer): UpDown.Cofree[Integer] =
       unfoldMap(collazt)(identity).apply(n)
 
     case class Two[T](t1: T, t2: T)
@@ -103,10 +103,10 @@ class Pairings extends FunSpec with Matchers{
         }
       }
 
-      def execute[S,T](program: Free[Two,S => T]): Cofree[UpDown,S] => T = 
+      def execute[S,T](program: Free[Two,S => T]): Cofree[UpDown,S] => T =
         Pairing[Free[Two,?],Cofree[UpDown,?]].pair[S=>T,S,T](f => a => f(a))(program)
 
-      def executeState[S,T](program: Free[Two,S => T]): State[Cofree[UpDown,S],T] = 
+      def executeState[S,T](program: Free[Two,S => T]): State[Cofree[UpDown,S],T] =
         FreeCofreePairing[Two,UpDown].pair[S=>T,S,T](f => a => f(a))(program)
 
     }
@@ -119,14 +119,14 @@ class Pairings extends FunSpec with Matchers{
     case object WentUp extends Direction
     case object WentDown extends Direction
 
-    def choose: Free[Two,Direction] = 
+    def choose: Free[Two,Direction] =
       Free.roll(Two(Free.pure(WentUp), Free.pure(WentDown)))
 
     val ex1: Free[Two, Integer => String] = for {
       d1 <- choose
       d2 <- choose
     } yield if (d1 == WentDown && d2 == WentDown) (i => "Went down twice " + i) else (_.toString)
-    
+
     it("should work on program ex1"){
       Two.execute(choose.map(d => (_ : Integer) => d))(memoiseCollatz(12)) shouldBe WentDown
 
@@ -184,7 +184,7 @@ class Pairings extends FunSpec with Matchers{
     type UpDownMachine[S] = UpDownAlg[State[S,?]]
 
     object Collatz extends UpDownMachine[Int]{
-      def next(): State[Int,UpDown] = State{ n => 
+      def next(): State[Int,UpDown] = State{ n =>
         if (n % 2 ==0) (n/2,Down)
         else (3*n+1,Up)
       }
@@ -209,7 +209,7 @@ class Pairings extends FunSpec with Matchers{
 
   }
 
-  
+
   type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
 
   trait IOCoChurch[Alg[_[_]],F[_]]{
@@ -226,11 +226,11 @@ class Pairings extends FunSpec with Matchers{
       val current = _current
     }
 
-    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] = 
+    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] =
       apply(coalg,_)
 
     // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
-    //   ???      
+    //   ???
     // }
   }
 
@@ -240,7 +240,7 @@ class Pairings extends FunSpec with Matchers{
 
   object Church{
 
-    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F = 
+    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F =
       λ[Church[Alg,?]~>F]{
         _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
       }
@@ -248,7 +248,7 @@ class Pairings extends FunSpec with Matchers{
 
   describe("Collatz with church and cochurch"){
     import IOCoalgebras._
-  
+
     it("should work"){
       val ex1Church = new Church[UpDownAlg,String]{
         def fold[P[_]: UpDownAlg: Monad] = ex1[P]
@@ -260,10 +260,56 @@ class Pairings extends FunSpec with Matchers{
 
   object PairingDLaing{
 
+    // Adder algebra with type classes
+
     trait Adder[P[_]]{
       def add(i: Int): P[Boolean]
       def clear(): P[Unit]
       def total(): P[Int]
+    }
+
+    // Adder algebra with F-algebras and GADTs
+
+    object AdderGADTAlg{
+      sealed abstract class AdderF[T]
+      case class Add(i: Int) extends AdderF[Boolean]
+      case class Clear() extends AdderF[Unit]
+      case class Total() extends AdderF[Int]
+
+      import scalaz.~>
+      type AdderAlg[P[_]] = AdderF ~> P
+
+      sealed abstract class Free[F[_],T]
+      case class Impure[F[_],T](t: F[T]) extends Free[F,T]
+      case class Return[F[_],T](t: T) extends Free[F,T]
+      case class FlatMap[F[_],T,A,B](p: Free[F,A])(f: A => Free[F,B]) extends Free[F,B]
+
+      object Free{
+        type AdderProgram[T] = Free[AdderF,T]
+
+        val AdderAlgFree = new AdderAlg[Free[AdderF,?]]{
+          def apply[T](f: AdderF[T]): Free[AdderF,T] = Impure(f)
+        }
+
+        def foldMap[F[_],T, P[_]: Monad](alg: AdderAlg[P]): Free[AdderF,?] ~> P =
+          ???
+      }
+    }
+
+    // Adder algebra with F-algebras and GADTs
+
+    object AdderADTAlg{
+      sealed abstract class AdderF[T]
+      case class Add[T](i: Int, k: Boolean => T) extends AdderF[T]
+      case class Clear[T](k: T) extends AdderF[T]
+      case class Total[T](k: Int => T) extends AdderF[T]
+
+      type AdderAlg[T] = AdderF[T] => T
+
+      sealed abstract class FreeAlg[F[_],_]
+      case class Pure[F[_],X](x: X) extends FreeAlg[F,X]
+      case class Join[F[_],X](cont: F[FreeAlg[F,X]]) extends FreeAlg[F,X]
+
     }
 
     case class AdderState(limit: Int, current: Int)
@@ -271,7 +317,7 @@ class Pairings extends FunSpec with Matchers{
     object AdderState{
       implicit object AdderStateI extends Adder[State[AdderState,?]]{
         def add(i: Int): State[AdderState,Boolean] = State{
-          case s@AdderState(total,current) => 
+          case s@AdderState(total,current) =>
             if (current + i > total) (s,true)
             else (AdderState(total, current+i),false)
         }
@@ -280,7 +326,6 @@ class Pairings extends FunSpec with Matchers{
       }
     }
 
-  
     def findLimit[P[_]: Monad](implicit A: Adder[P]): P[Int] = for{
       total <- A.total()
       _ <- A.clear()
@@ -303,7 +348,7 @@ class Pairings extends FunSpec with Matchers{
       val findLimitChurch = new Church[Adder,Int]{
         def fold[P[_]: Adder: Monad] = findLimit[P]
       }
-       
+
       Church.run(IOCoChurch[Adder,Id,AdderState](
         AdderState.AdderStateI, AdderState(10,0))).apply(findLimitChurch) shouldBe 10
     }
