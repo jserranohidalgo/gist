@@ -364,11 +364,17 @@ class Pairings extends FunSpec with Matchers{
             case Join(cont) => Join(cont map (bind(_)(f)))
           }
       }
-    }
 
-    def foldMap[F[_]: Functor,X,Y](alg: F[Y] => Y)(f: X=>Y): FreeAlg[F,X]=>Y = {
-      case Pure(x) => f(x)
-      case Join(cont) => alg(cont map foldMap(alg)(f))
+      def foldMap[F[_]: Functor,X,Y](alg: F[Y] => Y)(f: X=>Y): FreeAlg[F,X]=>Y = {
+        case Pure(x) => f(x)
+        case Join(cont) => alg(cont map foldMap(alg)(f))
+      }
+
+      def foldMap[F[_]: Functor,M[_]: Applicative](alg: Forall[λ[X => Alg[F,M[X]]]]): FreeAlg[F,?] ~> M = 
+        new (FreeAlg[F,?] ~> M){
+          def apply[X](p: FreeAlg[F,X]): M[X] = 
+            foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
+        }
     }
 
     // Adder Algebra
@@ -379,13 +385,8 @@ class Pairings extends FunSpec with Matchers{
     case class total[T](k: Int => T) extends AdderF[T]
 
     object AdderF{
-      def add(i: Int): AdderProgram[Boolean] =
-        Join(self.add(i,Pure.apply))
-      def clear(): AdderProgram[Unit] =
-        Join(self.clear(Pure(())))
-      def total(): AdderProgram[Int] =
-        Join(self.total(Pure.apply))
-
+      type Alg[T] = self.Alg[AdderF,T]
+      
       implicit val FF = new Functor[AdderF]{
         def map[A,B](p: AdderF[A])(f: A => B) = p match {
           case add(i, k) => self.add(i, k andThen f)
@@ -395,44 +396,98 @@ class Pairings extends FunSpec with Matchers{
       }
     }
 
-    type AdderAlg[T] = Alg[AdderF,T]
-
     type AdderProgram[T] = FreeAlg[AdderF,T]
+
+    object AdderProgram{
+      def add(i: Int): AdderProgram[Boolean] =
+        Join(self.add(i,Pure.apply))
+      def clear(): AdderProgram[Unit] =
+        Join(self.clear(Pure(())))
+      def total(): AdderProgram[Int] =
+        Join(self.total(Pure.apply))
+    }
 
     // Adder Interpreter
 
     case class AdderState(limit: Int, current: Int)
 
-    // object AdderState{
-    //   implicit def AdderStateI[Y](s: AdderState): AdderProgram[Y] => Y = {
-    //     case Pure(y) => y
-    //     case Join(add(i, k)) =>
-    //       case s@AdderState(total,current) =>
-    //         if (current + i > total) (s,true)
-    //         else (AdderState(total, current+i),false)
-    //     }
-    //     case Join(clear(k)) => State.modify(_.copy(current=0))
-    //     case Join(total(k)) => State.gets(_.current)
-    //   }
-    // }
+    object AdderState{
+
+      implicit def interpreter[X](s: AdderState): AdderProgram[X] => (AdderState,X) = {
+        case Pure(y) => (s,y)
+        case Join(add(i, k)) =>
+          if (s.current + i > s.limit) interpreter(s)(k(true))
+          else interpreter(AdderState(s.limit, s.current+i))(k(false))
+        case Join(clear(k)) => 
+          interpreter(s.copy(current=0))(k)
+        case Join(total(k)) => 
+          interpreter(s)(k(s.current))
+      }
+
+      implicit def interpreter[X]: AdderProgram[X] => State[AdderState,X] = {
+        case Pure(y) => 
+          State.state(y)
+        case Join(add(i,k)) => 
+          State[AdderState,Boolean]{
+            case s@AdderState(total,current) =>
+              if (current + i > total) (s,true)
+              else (AdderState(total, current+i),false) } >>= 
+          (k andThen interpreter)
+        case Join(clear(k)) => 
+          State.modify[AdderState](_.copy(current=0)) >> 
+          interpreter[X].apply(k)
+        case Join(total(k)) => 
+          State.gets[AdderState,Int](_.current) >>= 
+          (k andThen interpreter)
+      }
+      
+      implicit val stateAlg = new Forall[λ[X=>AdderF.Alg[State[AdderState,X]]]]{
+        def apply[X] = {
+          case add(i,k) => 
+            State[AdderState,Boolean]{
+              case s@AdderState(total,current) =>
+                if (current + i > total) (s,true)
+                else (AdderState(total, current+i),false) } >>= 
+            k
+          case clear(k) => 
+            State.modify[AdderState](_.copy(current=0)) >> 
+            k
+          case total(k) => 
+            State.gets[AdderState,Int](_.current) >>= 
+            k
+        }
+      }
+
+      implicit def interpreter2[X]: AdderProgram[X] => State[AdderState,X] =
+        // FreeAlg.foldMap[AdderF,X,State[AdderState,X]](alg[X])(State.state)
+        FreeAlg.foldMap(stateAlg).apply[X]
+    }
 
     // Programs
-    import AdderF._
+    import AdderProgram._
 
     def findLimit: AdderProgram[Int] = for{
-      t <- AdderF.total()
-      _ <- AdderF.clear()
+      t <- AdderProgram.total()
+      _ <- AdderProgram.clear()
       limit <- findLimitAux
-      _ <- AdderF.clear()
-      _ <- AdderF.add(t)
+      _ <- AdderProgram.clear()
+      _ <- AdderProgram.add(t)
     } yield limit
 
     def findLimitAux: AdderProgram[Int] = for {
-      overflow <- AdderF.add(1)
-      limit <- if (overflow) AdderF.total() else findLimitAux
+      overflow <- AdderProgram.add(1)
+      limit <- if (overflow) AdderProgram.total() else findLimitAux
     } yield limit
 
   }
 
+  describe("ADT-based adder"){
+    import AdderADTAlg._
 
+    it("Works"){
+      AdderState.interpreter(AdderState(3,0))(findLimit) shouldBe (AdderState(3,0),3)
+      AdderState.interpreter[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
+      AdderState.interpreter2[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
+    }
+  }
 }
