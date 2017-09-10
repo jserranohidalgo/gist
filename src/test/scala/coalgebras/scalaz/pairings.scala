@@ -365,15 +365,34 @@ class Pairings extends FunSpec with Matchers{
           }
       }
 
+      def lift[F[_]: Functor,X](fx: F[X]): FreeAlg[F,X] = 
+        Join(fx map Pure.apply)
+
       def foldMap[F[_]: Functor,X,Y](alg: F[Y] => Y)(f: X=>Y): FreeAlg[F,X]=>Y = {
         case Pure(x) => f(x)
         case Join(cont) => alg(cont map foldMap(alg)(f))
       }
 
+      // in terms of Forall
       def foldMap[F[_]: Functor,M[_]: Applicative](alg: Forall[λ[X => Alg[F,M[X]]]]): FreeAlg[F,?] ~> M = 
         new (FreeAlg[F,?] ~> M){
           def apply[X](p: FreeAlg[F,X]): M[X] = 
             foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
+        }
+
+      // in terms of natural transformations
+      def foldMap[F[_]: Functor,M[_]: Applicative](alg: λ[X => F[M[X]]]~>M): FreeAlg[F,?] ~> M = 
+        new (FreeAlg[F,?] ~> M){
+          def apply[X](p: FreeAlg[F,X]): M[X] = 
+            foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
+        }
+
+      def interpreter[F[_]: Functor, M[_]: Monad](alg: F ~> M): FreeAlg[F,?] ~> M = 
+        λ[FreeAlg[F,?] ~> M]{
+          case Pure(x) => 
+            Monad[M].pure(x)
+          case Join(inst) =>  
+            alg(inst) flatMap interpreter(alg).apply
         }
     }
 
@@ -400,11 +419,11 @@ class Pairings extends FunSpec with Matchers{
 
     object AdderProgram{
       def add(i: Int): AdderProgram[Boolean] =
-        Join(self.add(i,Pure.apply))
+        FreeAlg.lift(self.add(i,identity))
       def clear(): AdderProgram[Unit] =
-        Join(self.clear(Pure(())))
+        FreeAlg.lift(self.clear(()))
       def total(): AdderProgram[Int] =
-        Join(self.total(Pure.apply))
+        FreeAlg.lift(self.total(identity))
     }
 
     // Adder Interpreter
@@ -458,9 +477,42 @@ class Pairings extends FunSpec with Matchers{
         }
       }
 
+      implicit val stateAlg_1 = new Forall[λ[X=>AdderF.Alg[State[AdderState,X]]]]{
+        def apply[X]: AdderF.Alg[State[AdderState,X]] =
+          stateAlg2(_).join
+      } 
+      
       implicit def interpreter2[X]: AdderProgram[X] => State[AdderState,X] =
         // FreeAlg.foldMap[AdderF,X,State[AdderState,X]](alg[X])(State.state)
-        FreeAlg.foldMap(stateAlg).apply[X]
+        FreeAlg.foldMap(stateAlg_1).apply[X]
+
+
+      implicit val stateAlg2: AdderF ~> State[AdderState,?] = 
+        new (AdderF ~> State[AdderState,?]){
+          def apply[X](adderF: AdderF[X]) = adderF match {
+            case add(i,k) => 
+              State[AdderState,Boolean]{
+                case s@AdderState(total,current) =>
+                  if (current + i > total) (s,true)
+                  else (AdderState(total, current+i),false) } >>=
+              (k andThen State.state)    
+            case clear(k) => 
+              State.modify[AdderState](_.copy(current=0)) >> 
+              State.state(k)
+            case total(k) => 
+              State.gets[AdderState,Int](_.current) >>= 
+              (k andThen State.state)
+          }
+        }
+
+      implicit val stateAlg2_1: AdderF ~> State[AdderState,?] = 
+        λ[AdderF ~> State[AdderState,?]]{
+          f => stateAlg.apply(f.map(State.state))
+        }
+
+      implicit def interpreter3[X]: AdderProgram[X] => State[AdderState,X] =
+        FreeAlg.interpreter(stateAlg2_1).apply[X]
+
     }
 
     // Programs
@@ -488,6 +540,7 @@ class Pairings extends FunSpec with Matchers{
       AdderState.interpreter(AdderState(3,0))(findLimit) shouldBe (AdderState(3,0),3)
       AdderState.interpreter[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
       AdderState.interpreter2[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
+      AdderState.interpreter3[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
     }
   }
 }
