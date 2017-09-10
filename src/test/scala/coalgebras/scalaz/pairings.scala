@@ -6,6 +6,10 @@ import org.scalatest._
 
 class Pairings extends FunSpec with Matchers{
 
+  /**
+   * PRELIMINARIES
+   */
+
   trait Pairing[P[_],Q[_]]{
     def pair[X,Y,R](f: X => Y => R): P[X] => Q[Y] => R
   }
@@ -53,6 +57,53 @@ class Pairings extends FunSpec with Matchers{
         ff => cg => FCP.pair(f)(ff).eval(cg)
     }
   }
+
+  // IO- Coalgebras
+
+  type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
+
+  trait IOCoChurch[Alg[_[_]],F[_]]{
+    type S
+    val coalg: IOCoalgebra[Alg,F,S]
+    val current: S
+  }
+
+  object IOCoChurch{
+
+    def apply[Alg[_[_]],F[_],_S](_coalg: IOCoalgebra[Alg,F,_S], _current: _S) = new IOCoChurch[Alg,F]{
+      type S = _S
+      val coalg = _coalg
+      val current = _current
+    }
+
+    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] =
+      apply(coalg,_)
+
+    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F =
+      λ[Church[Alg,?]~>F]{
+        _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
+      }
+
+    // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
+    //   ???
+    // }
+  }
+
+  // (co)Church encodings
+
+  trait Church[Alg[_[_]],T]{
+    def fold[P[_]: Alg: Monad]: P[T]
+  }
+
+  object Church{
+
+  }
+
+
+
+  /** 
+   * PIPONI'S SAMPLE
+   */
 
   object Collazt{
 
@@ -168,7 +219,10 @@ class Pairings extends FunSpec with Matchers{
     // }
   }
 
-  object IOCoalgebras{
+  /** 
+   * PIPONI'S EXAMPLE WITH IO-COALGEBRAS
+   */
+  object IOCoalgebrasCollatz{
 
     // UpDown coalgebra
 
@@ -200,7 +254,7 @@ class Pairings extends FunSpec with Matchers{
   }
 
   describe("IOCoalgebra for Collatz"){
-    import IOCoalgebras._
+    import IOCoalgebrasCollatz._
 
     it("should work for ex1"){
       ex1(Monad[State[Int,?]],Collatz).eval(12) shouldBe "Went down twice 3"
@@ -209,54 +263,22 @@ class Pairings extends FunSpec with Matchers{
 
   }
 
-
-  type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
-
-  trait IOCoChurch[Alg[_[_]],F[_]]{
-    type S
-    val coalg: IOCoalgebra[Alg,F,S]
-    val current: S
-  }
-
-  object IOCoChurch{
-
-    def apply[Alg[_[_]],F[_],_S](_coalg: IOCoalgebra[Alg,F,_S], _current: _S) = new IOCoChurch[Alg,F]{
-      type S = _S
-      val coalg = _coalg
-      val current = _current
-    }
-
-    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] =
-      apply(coalg,_)
-
-    // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
-    //   ???
-    // }
-  }
-
-  trait Church[Alg[_[_]],T]{
-    def fold[P[_]: Alg: Monad]: P[T]
-  }
-
-  object Church{
-
-    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F =
-      λ[Church[Alg,?]~>F]{
-        _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
-      }
-  }
-
   describe("Collatz with church and cochurch"){
-    import IOCoalgebras._
+    import IOCoalgebrasCollatz._
 
     it("should work"){
       val ex1Church = new Church[UpDownAlg,String]{
         def fold[P[_]: UpDownAlg: Monad] = ex1[P]
       }
-      Church.run(IOCoChurch[UpDownAlg,Id,Int](Collatz, 12)).apply(ex1Church) shouldBe "Went down twice 3"
+      IOCoChurch.run(IOCoChurch[UpDownAlg,Id,Int](Collatz, 12)).apply(ex1Church) shouldBe "Went down twice 3"
     }
   }
 
+  /** 
+   * Dave Laing's EXAMPLE
+   */
+
+   // With type classes
 
   object PairingDLaing{
 
@@ -304,12 +326,16 @@ class Pairings extends FunSpec with Matchers{
   describe("Adder"){
     import PairingDLaing._
 
+    it("Works without cofrees"){
+      findLimit[State[AdderState,?]].apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
+    }
+
     it("should work"){
       val findLimitChurch = new Church[Adder,Int]{
         def fold[P[_]: Adder: Monad] = findLimit[P]
       }
 
-      Church.run(IOCoChurch[Adder,Id,AdderState](
+      IOCoChurch.run(IOCoChurch[Adder,Id,AdderState](
         AdderState.AdderStateI, AdderState(10,0))).apply(findLimitChurch) shouldBe 10
     }
   }
@@ -615,4 +641,5 @@ class Pairings extends FunSpec with Matchers{
       AdderState.interpreter3[Int](findLimit).apply((AdderState(3,0))) shouldBe (AdderState(3,0),3)
     }
   }
+
 }
