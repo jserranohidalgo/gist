@@ -10,96 +10,6 @@ class Pairings extends FunSpec with Matchers{ self =>
    * PRELIMINARIES
    */
 
-  trait Pairing[P[_],Q[_]]{
-    def pair[X,Y,R](f: X => Y => R): P[X] => Q[Y] => R
-  }
-
-  object Pairing{
-    def apply[P[_],Q[_]](implicit P: Pairing[P,Q]) = P
-
-    implicit def ExpProductPairing[A] = new Pairing[A => ?,(A,?)]{
-      def pair[X,Y,R](f: X => Y => R): (A => X) => ((A,Y)) => R =
-        e => p => f(e(p._1))(p._2)
-        // e => p => Function.uncurried(e andThen f).tupled(p)
-    }
-
-    implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) =
-      new Pairing[Free[F,?],Cofree[G,?]]{
-        def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
-          _.fold( x => c => f(x)(c.extract),
-            ff => c => p.pair(pair(f))(ff)(c.tail))
-      }
-  }
-
-  trait FreeCofreePairing[F[_],G[_]]{
-    val P: Pairing[F,G]
-    implicit val F: Functor[F]
-
-    def pair[X,Y,R](f: X => Y => R): Free[F,X] => State[Cofree[G,Y],R] =
-      _.fold(
-        x => State.gets(c => f(x)(c.extract)),
-        ff => State.get[Cofree[G,Y]] >>= { c =>
-          P.pair[Free[F,X],Cofree[G,Y],State[Cofree[G,Y],R]](
-            f2 => cf2 => State.put(cf2) >> pair(f)(f2))(ff)(c.tail)
-        }
-      )
-  }
-
-  object FreeCofreePairing{
-    def apply[F[_],G[_]](implicit P: FreeCofreePairing[F,G]) = P
-
-    implicit def fromPairing[F[_],G[_]](implicit _P: Pairing[F,G], _F: Functor[F]) = new FreeCofreePairing[F,G]{
-      val P = _P
-      val F = _F
-    }
-
-    def StandardPairing[F[_],G[_]](implicit FCP: FreeCofreePairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
-      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
-        ff => cg => FCP.pair(f)(ff).eval(cg)
-    }
-  }
-
-  // IO- Coalgebras
-
-  type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
-
-  trait IOCoChurch[Alg[_[_]],F[_]]{
-    type S
-    val coalg: IOCoalgebra[Alg,F,S]
-    val current: S
-  }
-
-  object IOCoChurch{
-
-    def apply[Alg[_[_]],F[_],_S](_coalg: IOCoalgebra[Alg,F,_S], _current: _S) = new IOCoChurch[Alg,F]{
-      type S = _S
-      val coalg = _coalg
-      val current = _current
-    }
-
-    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] =
-      apply(coalg,_)
-
-    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F =
-      λ[Church[Alg,?]~>F]{
-        _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
-      }
-
-    // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
-    //   ???
-    // }
-  }
-
-  // (co)Church encodings
-
-  trait Church[Alg[_[_]],T]{
-    def fold[P[_]: Alg: Monad]: P[T]
-  }
-
-  object Church{
-
-  }
-
   // Algebras & Free algebras
 
   type Alg[F[_],T] = F[T] => T
@@ -178,8 +88,118 @@ class Pairings extends FunSpec with Matchers{ self =>
     }
   }
 
+  // Coalgebras
+
+  type Coalg[F[_],S] = S => F[S]
+
+  case class CofreeCoalg[F[_],Y](extract: Y, tail: Function0[F[CofreeCoalg[F,Y]]])
+
+  object CofreeCoalg{
+    def delay[F[_],Y](e: Y, t: => F[CofreeCoalg[F,Y]]) =
+      CofreeCoalg(e, () => t)
+
+    def unfoldMap[F[_]: Functor,S,Y](coalg: S => F[S])(color: S => Y): S => CofreeCoalg[F,Y] =
+      (s: S) => CofreeCoalg(color(s),() => coalg(s) map unfoldMap[F,S,Y](coalg)(color))
+  }
+
+  // PAirings
+
+  trait Pairing[P[_],Q[_]]{
+    def pair[X,Y,R](f: X => Y => R): P[X] => Q[Y] => R
+  }
+
+  object Pairing{
+    def apply[P[_],Q[_]](implicit P: Pairing[P,Q]) = P
+
+    implicit def ExpProductPairing[A] = new Pairing[A => ?,(A,?)]{
+      def pair[X,Y,R](f: X => Y => R): (A => X) => ((A,Y)) => R =
+        e => p => f(e(p._1))(p._2)
+        // e => p => Function.uncurried(e andThen f).tupled(p)
+    }
+
+    implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) =
+      new Pairing[FreeAlg[F,?],CofreeCoalg[G,?]]{
+        def pair[X,Y,R](f: X => Y => R): FreeAlg[F,X] => CofreeCoalg[G,Y] => R = {
+          case Pure(x) => c => f(x)(c.extract)
+          case Join(ff) => c => p.pair(pair(f))(ff)(c.tail())
+        }
+      }
+  }
+
+  trait FreeCofreePairing[F[_],G[_]]{
+    val P: Pairing[F,G]
+    implicit val F: Functor[F]
+
+    def pair[X,Y,R](f: X => Y => R): FreeAlg[F,X] => State[CofreeCoalg[G,Y],R] = {
+      case Pure(x) => State.gets(c => f(x)(c.extract))
+      case Join(ff) => State.get[CofreeCoalg[G,Y]] >>= { c =>
+        P.pair[FreeAlg[F,X],CofreeCoalg[G,Y],State[CofreeCoalg[G,Y],R]](
+          f2 => cf2 => State.put(cf2) >> pair(f)(f2))(ff)(c.tail())
+      }
+    }
+
+    def run[X,Y](f: FreeAlg[F,X]): State[CofreeCoalg[G,Y],X] =
+      pair[X,Y,X](x => _ => x)(f)
+  }
+
+  object FreeCofreePairing{
+    def apply[F[_],G[_]](implicit P: FreeCofreePairing[F,G]) = P
+
+    implicit def fromPairing[F[_],G[_]](implicit _P: Pairing[F,G], _F: Functor[F]) = new FreeCofreePairing[F,G]{
+      val P = _P
+      val F = _F
+    }
+
+    def StandardPairing[F[_],G[_]](implicit FCP: FreeCofreePairing[F,G]) = new Pairing[FreeAlg[F,?],CofreeCoalg[G,?]]{
+      def pair[X,Y,R](f: X => Y => R): FreeAlg[F,X] => CofreeCoalg[G,Y] => R =
+        ff => cg => FCP.pair(f)(ff).eval(cg)
+    }
+  }
+
+  // IO- Coalgebras
+
+  type IOCoalgebra[Alg[_[_]],F[_],S] = Alg[StateT[F,S,?]]
+
+  trait IOCoChurch[Alg[_[_]],F[_]]{
+    type S
+    val coalg: IOCoalgebra[Alg,F,S]
+    val current: S
+  }
+
+  object IOCoChurch{
+
+    def apply[Alg[_[_]],F[_],_S](_coalg: IOCoalgebra[Alg,F,_S], _current: _S) = new IOCoChurch[Alg,F]{
+      type S = _S
+      val coalg = _coalg
+      val current = _current
+    }
+
+    def unfold[Alg[_[_]],F[_],S](coalg: IOCoalgebra[Alg,F,S]): S => IOCoChurch[Alg,F] =
+      apply(coalg,_)
+
+    def run[Alg[_[_]],F[_]: Monad](machine: IOCoChurch[Alg,F]): Church[Alg,?] ~> F =
+      λ[Church[Alg,?]~>F]{
+        _.fold[StateT[F,machine.S,?]](machine.coalg, Monad[StateT[F,machine.S,?]]).eval(machine.current)
+      }
+
+    // implicit def IOCoChurchIOCoalgebra[I[_[_]],F[_],S] = new I[StateT[F,IOCoChurch[I,F],?]]{
+    //   ???
+    // }
+  }
+
+  // (co)Church encodings
+
+  trait Church[Alg[_[_]],T]{
+    def fold[P[_]: Alg: Monad]: P[T]
+  }
+
+  object Church{
+
+  }
+
+
   /**
-   * PIPONI'S SAMPLE
+   * PIPONI'S EXAMPLE
    */
 
   object Collazt{
@@ -196,16 +216,16 @@ class Pairings extends FunSpec with Matchers{ self =>
         }
       }
 
-      type Cofree[T] = scalaz.Cofree[UpDown,T]
+      type Cofree[T] = CofreeCoalg[UpDown,T]
     }
 
-    def unfoldMap[G[_]: Functor,A,B](coalg: A => G[A])(color: A => B): A => Cofree[G,B] =
-      a => Cofree.delay(color(a), Functor[G].map(coalg(a))(unfoldMap(coalg)(color)))
+    def unfoldMap[G[_]: Functor,A,B](coalg: A => G[A])(color: A => B): A => CofreeCoalg[G,B] =
+      a => CofreeCoalg.delay(color(a), Functor[G].map(coalg(a))(unfoldMap(coalg)(color)))
 
-    def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): Cofree[λ[t => Option[G[t]]],B] =
-      Cofree[λ[t => Option[G[t]]],B](b,
-        values.seq.foldRight[Option[G[Cofree[λ[t => Option[G[t]]],B]]]](Option.empty){
-          case (g,cf) => Some(g map { b1 => Cofree[λ[t => Option[G[t]]],B](b1,cf)})
+    def unfoldAdHoc[B,G[_]: Functor](b: B, values: G[B]*): CofreeCoalg[λ[t => Option[G[t]]],B] =
+      CofreeCoalg[λ[t => Option[G[t]]],B](b,
+        () => values.seq.foldRight[Option[G[CofreeCoalg[λ[t => Option[G[t]]],B]]]](Option.empty){
+          case (g,cf) => Some(g map { b1 => CofreeCoalg[λ[t => Option[G[t]]],B](b1,() => cf)})
         })
 
     def collazt(n: Integer): UpDown[Integer] =
@@ -231,10 +251,10 @@ class Pairings extends FunSpec with Matchers{ self =>
         }
       }
 
-      def execute[S,T](program: Free[Two,S => T]): Cofree[UpDown,S] => T =
-        Pairing[Free[Two,?],Cofree[UpDown,?]].pair[S=>T,S,T](f => a => f(a))(program)
+      def execute[S,T](program: FreeAlg[Two,S => T]): CofreeCoalg[UpDown,S] => T =
+        Pairing[FreeAlg[Two,?],CofreeCoalg[UpDown,?]].pair[S=>T,S,T](f => a => f(a))(program)
 
-      def executeState[S,T](program: Free[Two,S => T]): State[Cofree[UpDown,S],T] =
+      def executeState[S,T](program: FreeAlg[Two,S => T]): State[CofreeCoalg[UpDown,S],T] =
         FreeCofreePairing[Two,UpDown].pair[S=>T,S,T](f => a => f(a))(program)
 
     }
@@ -247,10 +267,10 @@ class Pairings extends FunSpec with Matchers{ self =>
     case object WentUp extends Direction
     case object WentDown extends Direction
 
-    def choose: Free[Two,Direction] =
-      Free.roll(Two(Free.pure(WentUp), Free.pure(WentDown)))
+    def choose: FreeAlg[Two,Direction] =
+      Join(Two(Pure(WentUp), Pure(WentDown)))
 
-    val ex1: Free[Two, Integer => String] = for {
+    val ex1: FreeAlg[Two, Integer => String] = for {
       d1 <- choose
       d2 <- choose
     } yield if (d1 == WentDown && d2 == WentDown) (i => "Went down twice " + i) else (_.toString)
@@ -504,7 +524,7 @@ class Pairings extends FunSpec with Matchers{ self =>
 
       implicit val FF = new Functor[AdderF]{
         def map[A,B](p: AdderF[A])(f: A => B) = p match {
-          case Add(i, k) => Add(i, k andThen f)
+          case Add(i,k) => Add(i, k andThen f)
           case Clear(k) => Clear(f(k))
           case Total(k) => Total(k andThen f)
         }
@@ -524,9 +544,57 @@ class Pairings extends FunSpec with Matchers{ self =>
 
     // Adder Interpreter
 
+    case class CoAdderF[S](
+      add: Int => (S, Boolean),
+      clear: S,
+      total: (S, Int))
+
+    // sealed abstract class CoAdderF[S](
+    //   coAdd  : Int  => (S, Bool),
+    //   coClear: Unit => (S, Unit),
+    //   coTotal: Unit => (S, Int))
+
+    object CoAdderF{
+      type Coalg[S] = S => CoAdderF[S]
+
+      implicit val PairingAdderF = new Pairing[AdderF,CoAdderF]{
+        def pair[X,Y,R](f: X => Y => R): AdderF[X] => CoAdderF[Y] => R = {
+          case Add(i,k) => co => {
+            val (y,b) = co.add(i)
+            f(k(b))(y)
+          }
+          case Clear(x) => co => f(x)(co.clear)
+          case Total(k) => co => f(k(co.total._2))(co.total._1)
+        }
+      }
+    }
+
+    // Adder Machine
+
+    type AdderMachine[Y] = CofreeCoalg[CoAdderF,Y]
+
+
     case class AdderState(limit: Int, current: Int)
 
     object AdderState{
+
+      // Coalgebra
+
+      implicit val AdderStateCoalg: Coalg[CoAdderF, AdderState] = {
+        case s@AdderState(l,c) =>
+          CoAdderF(
+            (i: Int) => if (i+c > l) (s,true) else (AdderState(l,c+i),false),
+            AdderState(l, 0),
+            (s,c)
+          )
+      }
+
+      def run[X,Y](program: AdderProgram[X]): State[AdderMachine[Y],X] = State{
+        machine => FreeCofreePairing[AdderF,CoAdderF].run(program).apply(machine)
+      }
+
+
+      // Algebras
 
       implicit def interpreter[X](s: AdderState): AdderProgram[X] => (AdderState,X) = {
         case Pure(y) => (s,y)
