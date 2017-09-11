@@ -4,7 +4,7 @@ import scalaz._, Scalaz._
 
 import org.scalatest._
 
-class Pairings extends FunSpec with Matchers{
+class Pairings extends FunSpec with Matchers{ self =>
 
   /**
    * PRELIMINARIES
@@ -23,11 +23,12 @@ class Pairings extends FunSpec with Matchers{
         // e => p => Function.uncurried(e andThen f).tupled(p)
     }
 
-    implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) = new Pairing[Free[F,?],Cofree[G,?]]{
-      def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
-        _.fold( x => c => f(x)(c.extract),
-          ff => c => p.pair(pair(f))(ff)(c.tail))
-    }
+    implicit def FreeCofree[F[_]: Functor,G[_]](implicit p: Pairing[F,G]) =
+      new Pairing[Free[F,?],Cofree[G,?]]{
+        def pair[X,Y,R](f: X => Y => R): Free[F,X] => Cofree[G,Y] => R =
+          _.fold( x => c => f(x)(c.extract),
+            ff => c => p.pair(pair(f))(ff)(c.tail))
+      }
   }
 
   trait FreeCofreePairing[F[_],G[_]]{
@@ -99,9 +100,85 @@ class Pairings extends FunSpec with Matchers{
 
   }
 
+  // Algebras & Free algebras
 
+  type Alg[F[_],T] = F[T] => T
 
-  /** 
+  sealed abstract class FreeAlg[F[_],_]
+  case class Pure[F[_],X](x: X) extends FreeAlg[F,X]
+  case class Join[F[_],X](cont: F[FreeAlg[F,X]]) extends FreeAlg[F,X]
+
+  object FreeAlg{
+    implicit def FreeAlgMonad[F[_]: Functor] = new Monad[FreeAlg[F,?]]{
+      def point[A](a: => A) = Pure(a)
+      def bind[A,B](p: FreeAlg[F,A])(f: A => FreeAlg[F,B]): FreeAlg[F,B] =
+        p match {
+          case Pure(x) => f(x)
+          case Join(cont) => Join(cont map (bind(_)(f)))
+        }
+    }
+
+    def AlgFreeAlg[F[_],X]: F[FreeAlg[F,X]] => FreeAlg[F,X] =
+      Join(_)
+
+    def lift[F[_]: Functor,X](fx: F[X]): FreeAlg[F,X] =
+      Join(fx map Pure.apply)
+
+    def foldMap[F[_]: Functor,X,Y](alg: F[Y] => Y)(f: X=>Y): FreeAlg[F,X]=>Y = {
+      case Pure(x) => f(x)
+      case Join(cont) => alg(cont map foldMap(alg)(f))
+    }
+
+    // in terms of Forall
+    def foldMap[F[_]: Functor,M[_]: Applicative](alg: Forall[λ[X => Alg[F,M[X]]]]): FreeAlg[F,?] ~> M =
+      new (FreeAlg[F,?] ~> M){
+        def apply[X](p: FreeAlg[F,X]): M[X] =
+          foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
+      }
+
+    // in terms of natural transformations
+    def foldMap[F[_]: Functor,M[_]: Applicative](alg: λ[X => F[M[X]]]~>M): FreeAlg[F,?] ~> M =
+      new (FreeAlg[F,?] ~> M){
+        def apply[X](p: FreeAlg[F,X]): M[X] =
+          foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
+      }
+
+    def interpreter[F[_]: Functor, M[_]: Monad](alg: F ~> M): FreeAlg[F,?] ~> M =
+      λ[FreeAlg[F,?] ~> M]{
+        case Pure(x) =>
+          Monad[M].pure(x)
+        case Join(inst) =>
+          alg(inst) flatMap interpreter(alg).apply
+      }
+  }
+
+  // Free monads
+
+  sealed abstract class FreeMonad[F[_],T]
+  case class Impure[F[_],T](t: F[T]) extends FreeMonad[F,T]
+  case class Return[F[_],T](t: T) extends FreeMonad[F,T]
+  case class FlatMap[F[_],T,A,B](p: FreeMonad[F,A], f: A => FreeMonad[F,B]) extends FreeMonad[F,B]
+
+  object FreeMonad{
+    def foldMap[F[_],P[_]: Monad](variable: F ~> P): FreeMonad[F,?] ~> P =
+      λ[FreeMonad[F,?] ~> P]{
+        case Impure(f) => variable(f)
+        case Return(t) => t.pure[P]
+        case FlatMap(p,f) => foldMap(variable).apply(p) flatMap (f andThen foldMap(variable).apply)
+      }
+
+    def lift[F[_],T](f: F[T]): FreeMonad[F,T] =
+      Impure(f)
+
+    implicit def FreeMonadMonad[F[_]] = new Monad[FreeMonad[F,?]]{
+      def point[A](a: => A): FreeMonad[F,A] =
+        Return(a)
+      def bind[A,B](p: FreeMonad[F,A])(f: A => FreeMonad[F,B]): FreeMonad[F,B] =
+        FlatMap(p,f)
+    }
+  }
+
+  /**
    * PIPONI'S SAMPLE
    */
 
@@ -219,7 +296,7 @@ class Pairings extends FunSpec with Matchers{
     // }
   }
 
-  /** 
+  /**
    * PIPONI'S EXAMPLE WITH IO-COALGEBRAS
    */
   object IOCoalgebrasCollatz{
@@ -274,7 +351,7 @@ class Pairings extends FunSpec with Matchers{
     }
   }
 
-  /** 
+  /**
    * Dave Laing's EXAMPLE
    */
 
@@ -344,46 +421,21 @@ class Pairings extends FunSpec with Matchers{
 
   object AdderGADTAlg{
 
-    // Free monads
-
-    sealed abstract class Free[F[_],T]
-    case class Impure[F[_],T](t: F[T]) extends Free[F,T]
-    case class Return[F[_],T](t: T) extends Free[F,T]
-    case class FlatMap[F[_],T,A,B](p: Free[F,A], f: A => Free[F,B]) extends Free[F,B]
-
-    object Free{
-      def foldMap[F[_],P[_]: Monad](variable: F ~> P): Free[F,?] ~> P = 
-        λ[Free[F,?] ~> P]{
-          case Impure(f) => variable(f)
-          case Return(t) => t.pure[P]
-          case FlatMap(p,f) => foldMap(variable).apply(p) flatMap (f andThen foldMap(variable).apply)
-        }
-
-      def lift[F[_],T](f: F[T]): Free[F,T] = 
-        Impure(f)
-
-      implicit def FreeMonadMonad[F[_]] = new Monad[Free[F,?]]{
-        def point[A](a: => A): Free[F,A] = 
-          Return(a)
-        def bind[A,B](p: Free[F,A])(f: A => Free[F,B]): Free[F,B] =
-          FlatMap(p,f)
-      }
-    }
 
     sealed abstract class AdderF[T]
     case class Add(i: Int) extends AdderF[Boolean]
     case class Clear() extends AdderF[Unit]
     case class Total() extends AdderF[Int]
-          
-    type AdderProgram[T] = Free[AdderF,T]
+
+    type AdderProgram[T] = FreeMonad[AdderF,T]
 
     object AdderProgram{
       def add(i: Int): AdderProgram[Boolean] =
-        Free.lift(Add(i))
+        FreeMonad.lift(Add(i))
       def clear(): AdderProgram[Unit] =
-        Free.lift(Clear())
+        FreeMonad.lift(Clear())
       def total(): AdderProgram[Int] =
-        Free.lift(Total())
+        FreeMonad.lift(Total())
     }
 
     // Programs
@@ -408,22 +460,22 @@ class Pairings extends FunSpec with Matchers{
 
     object AdderState{
 
-      implicit val stateVar: AdderF ~> State[AdderState,?] = 
+      implicit val stateVar: AdderF ~> State[AdderState,?] =
         λ[AdderF ~> State[AdderState,?]]{
-          case Add(i) => 
+          case Add(i) =>
             State[AdderState,Boolean]{
               case s@AdderState(total,current) =>
                 if (current + i > total) (s,true)
-                else (AdderState(total, current+i),false) 
-            }    
-          case Clear() => 
+                else (AdderState(total, current+i),false)
+            }
+          case Clear() =>
             State.modify[AdderState](_.copy(current=0))
-          case Total() => 
+          case Total() =>
             State.gets[AdderState,Int](_.current)
         }
 
       implicit def run[X]: AdderProgram[X] => State[AdderState,X] =
-        Free.foldMap(stateVar).apply[X]
+        FreeMonad.foldMap(stateVar).apply[X]
     }
 
   }
@@ -438,77 +490,23 @@ class Pairings extends FunSpec with Matchers{
 
   // Adder algebra with F-algebras and GADTs
 
-  object AdderADTAlg{ self =>
-
-    // Algebras & Free algebras
-
-    type Alg[F[_],T] = F[T] => T
-
-    sealed abstract class FreeAlg[F[_],_]
-    case class Pure[F[_],X](x: X) extends FreeAlg[F,X]
-    case class Join[F[_],X](cont: F[FreeAlg[F,X]]) extends FreeAlg[F,X]
-
-    object FreeAlg{
-      implicit def FreeAlgMonad[F[_]: Functor] = new Monad[FreeAlg[F,?]]{
-        def point[A](a: => A) = Pure(a)
-        def bind[A,B](p: FreeAlg[F,A])(f: A => FreeAlg[F,B]): FreeAlg[F,B] =
-          p match {
-            case Pure(x) => f(x)
-            case Join(cont) => Join(cont map (bind(_)(f)))
-          }
-      }
-
-      def AlgFreeAlg[F[_],X]: F[FreeAlg[F,X]] => FreeAlg[F,X] = 
-        Join(_)
-
-      def lift[F[_]: Functor,X](fx: F[X]): FreeAlg[F,X] = 
-        Join(fx map Pure.apply)
-
-      def foldMap[F[_]: Functor,X,Y](alg: F[Y] => Y)(f: X=>Y): FreeAlg[F,X]=>Y = {
-        case Pure(x) => f(x)
-        case Join(cont) => alg(cont map foldMap(alg)(f))
-      }
-
-      // in terms of Forall
-      def foldMap[F[_]: Functor,M[_]: Applicative](alg: Forall[λ[X => Alg[F,M[X]]]]): FreeAlg[F,?] ~> M = 
-        new (FreeAlg[F,?] ~> M){
-          def apply[X](p: FreeAlg[F,X]): M[X] = 
-            foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
-        }
-
-      // in terms of natural transformations
-      def foldMap[F[_]: Functor,M[_]: Applicative](alg: λ[X => F[M[X]]]~>M): FreeAlg[F,?] ~> M = 
-        new (FreeAlg[F,?] ~> M){
-          def apply[X](p: FreeAlg[F,X]): M[X] = 
-            foldMap[F,X,M[X]](alg[X])(_.pure[M]).apply(p)
-        }
-
-      def interpreter[F[_]: Functor, M[_]: Monad](alg: F ~> M): FreeAlg[F,?] ~> M = 
-        λ[FreeAlg[F,?] ~> M]{
-          case Pure(x) => 
-            Monad[M].pure(x)
-          case Join(inst) =>  
-            alg(inst) flatMap interpreter(alg).apply
-        }
-    }
-
-
+  object AdderADTAlg{
 
     // Adder Algebra
 
     sealed abstract class AdderF[T]
-    case class add[T](i: Int, k: Boolean => T) extends AdderF[T]
-    case class clear[T](k: T) extends AdderF[T]
-    case class total[T](k: Int => T) extends AdderF[T]
+    case class Add[T](i: Int, k: Boolean => T) extends AdderF[T]
+    case class Clear[T](k: T) extends AdderF[T]
+    case class Total[T](k: Int => T) extends AdderF[T]
 
     object AdderF{
       type Alg[T] = self.Alg[AdderF,T]
-      
+
       implicit val FF = new Functor[AdderF]{
         def map[A,B](p: AdderF[A])(f: A => B) = p match {
-          case add(i, k) => self.add(i, k andThen f)
-          case clear(k) => self.clear(f(k))
-          case total(k) => self.total(k andThen f)
+          case Add(i, k) => Add(i, k andThen f)
+          case Clear(k) => Clear(f(k))
+          case Total(k) => Total(k andThen f)
         }
       }
     }
@@ -517,11 +515,11 @@ class Pairings extends FunSpec with Matchers{
 
     object AdderProgram{
       def add(i: Int): AdderProgram[Boolean] =
-        FreeAlg.lift(self.add(i,identity))
+        FreeAlg.lift(Add(i,identity))
       def clear(): AdderProgram[Unit] =
-        FreeAlg.lift(self.clear(()))
+        FreeAlg.lift(Clear(()))
       def total(): AdderProgram[Int] =
-        FreeAlg.lift(self.total(identity))
+        FreeAlg.lift(Total(identity))
     }
 
     // Adder Interpreter
@@ -532,45 +530,45 @@ class Pairings extends FunSpec with Matchers{
 
       implicit def interpreter[X](s: AdderState): AdderProgram[X] => (AdderState,X) = {
         case Pure(y) => (s,y)
-        case Join(add(i, k)) =>
+        case Join(Add(i, k)) =>
           if (s.current + i > s.limit) interpreter(s)(k(true))
           else interpreter(AdderState(s.limit, s.current+i))(k(false))
-        case Join(clear(k)) => 
+        case Join(Clear(k)) =>
           interpreter(s.copy(current=0))(k)
-        case Join(total(k)) => 
+        case Join(Total(k)) =>
           interpreter(s)(k(s.current))
       }
 
       implicit def interpreter[X]: AdderProgram[X] => State[AdderState,X] = {
-        case Pure(y) => 
+        case Pure(y) =>
           State.state(y)
-        case Join(add(i,k)) => 
+        case Join(Add(i,k)) =>
           State[AdderState,Boolean]{
             case s@AdderState(total,current) =>
               if (current + i > total) (s,true)
-              else (AdderState(total, current+i),false) } >>= 
+              else (AdderState(total, current+i),false) } >>=
           (k andThen interpreter)
-        case Join(clear(k)) => 
-          State.modify[AdderState](_.copy(current=0)) >> 
+        case Join(Clear(k)) =>
+          State.modify[AdderState](_.copy(current=0)) >>
           interpreter[X].apply(k)
-        case Join(total(k)) => 
-          State.gets[AdderState,Int](_.current) >>= 
+        case Join(Total(k)) =>
+          State.gets[AdderState,Int](_.current) >>=
           (k andThen interpreter)
       }
-      
+
       implicit val stateAlg = new Forall[λ[X=>AdderF.Alg[State[AdderState,X]]]]{
         def apply[X] = {
-          case add(i,k) => 
+          case Add(i,k) =>
             State[AdderState,Boolean]{
               case s@AdderState(total,current) =>
                 if (current + i > total) (s,true)
-                else (AdderState(total, current+i),false) } >>= 
+                else (AdderState(total, current+i),false) } >>=
             k
-          case clear(k) => 
-            State.modify[AdderState](_.copy(current=0)) >> 
+          case Clear(k) =>
+            State.modify[AdderState](_.copy(current=0)) >>
             k
-          case total(k) => 
-            State.gets[AdderState,Int](_.current) >>= 
+          case Total(k) =>
+            State.gets[AdderState,Int](_.current) >>=
             k
         }
       }
@@ -579,31 +577,31 @@ class Pairings extends FunSpec with Matchers{
         def apply[X]: AdderF.Alg[State[AdderState,X]] =
           stateAlg2(_).join
       }
-      
+
       implicit def interpreter2[X]: AdderProgram[X] => State[AdderState,X] =
         // FreeAlg.foldMap[AdderF,X,State[AdderState,X]](alg[X])(State.state)
         FreeAlg.foldMap(stateAlg_1).apply[X]
 
 
-      implicit val stateAlg2: AdderF ~> State[AdderState,?] = 
+      implicit val stateAlg2: AdderF ~> State[AdderState,?] =
         new (AdderF ~> State[AdderState,?]){
           def apply[X](adderF: AdderF[X]) = adderF match {
-            case add(i,k) => 
+            case Add(i,k) =>
               State[AdderState,Boolean]{
                 case s@AdderState(total,current) =>
                   if (current + i > total) (s,true)
                   else (AdderState(total, current+i),false) } >>=
-              (k andThen State.state)    
-            case clear(k) => 
-              State.modify[AdderState](_.copy(current=0)) >> 
+              (k andThen State.state)
+            case Clear(k) =>
+              State.modify[AdderState](_.copy(current=0)) >>
               State.state(k)
-            case total(k) => 
-              State.gets[AdderState,Int](_.current) >>= 
+            case Total(k) =>
+              State.gets[AdderState,Int](_.current) >>=
               (k andThen State.state)
           }
         }
 
-      implicit val stateAlg2_1: AdderF ~> State[AdderState,?] = 
+      implicit val stateAlg2_1: AdderF ~> State[AdderState,?] =
         λ[AdderF ~> State[AdderState,?]]{
           f => stateAlg.apply(f.map(State.state))
         }
