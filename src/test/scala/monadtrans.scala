@@ -3,7 +3,7 @@ package org.hablapps.gist
 import scalaz._, Scalaz._
 
 import org.scalatest._
-class MonadTrans extends FunSpec with Matchers{
+class MonadTransS extends FunSpec with Matchers{
 
   /** Utils */
 
@@ -41,18 +41,45 @@ class MonadTrans extends FunSpec with Matchers{
 
   type IdHK[F[_],T] = F[T]
 
+  trait TransS2[T[_[_],_[_],_]]{
+
+    def enhance[Σ[_],P[_]: Monad]: Alg[Σ, λ[A => (A => T[P,Σ,A])]]
+
+    def transF[Σ[_],P[_]: Monad](implicit M: MonadTrans[T[?[_],Σ,?]]): Alg[Σ,P] => Alg[Σ,T[P,Σ,?]] = alg =>
+      λ[Alg[Σ,T[P,Σ,?]]]{ inst =>
+        M[P].bind(M.liftM(alg(inst)))(enhance[Σ,P].apply(inst))
+      }
+
+    def apply[TC[_[_]],Σ[_],P[_]: Monad](implicit
+      iso: Alg.Iso.Aux[TC,Σ],
+      M: MonadTrans[T[?[_],Σ,?]],
+      tc: TC[P]): TC[T[P,Σ,?]] =
+      tc |> (iso.to[P](_)) |> transF[Σ,P] |> iso.from[T[P,Σ,?]]
+  }
+
+  trait WriterTrans2[W[_[_]]] extends TransS2[λ[(P[_],Σ[_],A) => WriterT[P,W[Σ],A]]]{
+    implicit def S[Σ[_]]: Monoid[W[Σ]]
+
+    def output[Σ[_]]: Alg[Σ, ? => W[Σ]]
+
+    def enhance[Σ[_],P[_]: Monad] =  λ[Σ ~> λ[A => (A => WriterT[P,W[Σ],A])]]{
+      inst => a => Monad[WriterT[P,W[Σ],?]].point(a) :++>> output(inst)
+    }
+  }
+
   trait TransS[T[_[_],_[_],_]]{
 
     def enhance[Σ[_],P[_]: Functor]: λ[A => (T[P,Σ,A],Σ[A])] ~> T[P,Σ,?]
 
-    def transF[Σ[_],P[_]: Functor](implicit L: Lift[T[?[_],Σ,?]]): Alg[Σ,P] => Alg[Σ,T[P,Σ,?]] = alg =>
+    def transF[Σ[_],P[_]: Functor](implicit
+      L: Lift[T[?[_],Σ,?]]): Alg[Σ,P] => Alg[Σ,T[P,Σ,?]] = alg =>
       λ[Alg[Σ,T[P,Σ,?]]]{ inst =>
         enhance[Σ,P].apply(L.lift[P].apply(alg(inst)),inst)
       }
 
     def apply[TC[_[_]],Σ[_],P[_]: Functor](implicit
       iso: Alg.Iso.Aux[TC,Σ], tc: TC[P], L: Lift[T[?[_],Σ,?]]): TC[T[P,Σ,?]] =
-      iso.from[T[P,Σ,?]](transF[Σ,P].apply(iso.to[P](tc)))
+      tc |> (iso.to[P](_)) |> transF[Σ,P] |> iso.from[T[P,Σ,?]]
   }
 
   trait Trans[T[_[_],_]]{
@@ -66,14 +93,14 @@ class MonadTrans extends FunSpec with Matchers{
 
     def apply[TC[_[_]],Σ[_],P[_]: Functor](implicit
       iso: Alg.Iso.Aux[TC,Σ], tc: TC[P], L: Lift[T]): TC[T[P,?]] =
-      iso.from[T[P,?]](transF[Σ,P].apply(iso.to[P](tc)))
+      tc |> (iso.to[P](_)) |> transF[Σ,P] |> iso.from[T[P,?]]
   }
 
 
   trait WriterTrans[W[Σ[_]]] extends TransS[λ[(P[_],Σ[_],A) => WriterT[P,W[Σ],A]]]{
     implicit def S[Σ[_]]: Semigroup[W[Σ]]
 
-    def output[Σ[_],A]: Alg[Σ, ? => W[Σ]]
+    def output[Σ[_]]: Alg[Σ, ? => W[Σ]]
 
     def enhance[Σ[_],P[_]: Functor] =  λ[λ[A => (WriterT[P,W[Σ],A],Σ[A])] ~> WriterT[P,W[Σ],?]]{
       case (w,inst) => w :++>> output(inst)
@@ -114,7 +141,7 @@ class MonadTrans extends FunSpec with Matchers{
   object debug extends WriterTrans[InstLog]{
     def S[Σ[_]] = Monoid[InstLog[Σ]]
 
-    def output[Σ[_],A] = λ[Alg[Σ,? => InstLog[Σ]]]{
+    def output[Σ[_]] = λ[Alg[Σ,? => InstLog[Σ]]]{
       inst => out => List(Log(inst,out))
     }
   }
