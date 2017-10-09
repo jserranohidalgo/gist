@@ -35,6 +35,12 @@ class MonadTrans extends FunSpec with Matchers{
     }
   }
 
+  trait NatHK[F[_[_],_], G[_[_],_]]{
+    def apply[H[_]]: F[H,?] ~> G[H,?]
+  }
+
+  type IdHK[F[_],T] = F[T]
+
   trait TransS[T[_[_],_[_],_]]{
 
     def enhance[Σ[_],P[_]: Functor]: λ[A => (T[P,Σ,A],Σ[A])] ~> T[P,Σ,?]
@@ -72,7 +78,7 @@ class MonadTrans extends FunSpec with Matchers{
     def listen[A](p: StateT[F,S,A]): StateT[F,S,(A,L)] = ???
   }
 
-  /** MonadTell */
+  /** Debug MonadTell */
 
   case class Log[Σ[_],T](inst: Σ[T], out: T)
 
@@ -92,7 +98,7 @@ class MonadTrans extends FunSpec with Matchers{
       iso.to[P](tc) |> applyF[Σ,P](M) |> iso.from[P]
   }
 
-  /* WriterT */
+  /* Debug WriterT */
 
   object debug extends TransS[λ[(P[_],Σ[_],T) => WriterT[P,InstLog[Σ],T]]]{
 
@@ -100,6 +106,25 @@ class MonadTrans extends FunSpec with Matchers{
       case (w,inst) => w :++>> ( out => List(Log(inst,out)))
     }
 
+  }
+
+  /* WriterT */
+
+  trait WriterTrans[W] extends Trans[WriterT[?[_],W,?]]{
+    implicit val S: Semigroup[W]
+
+    val output: NatHK[IdHK,λ[(Σ[_],A) => (A=>W)]]
+
+    def enhance[Σ[_],P[_]: Functor] =  λ[λ[A => (WriterT[P,W,A],Σ[A])] ~> WriterT[P,W,?]]{
+      case (w,inst) => w :++>> output[Σ](inst)
+    }
+  }
+
+  object WriterTrans{
+    def apply[W: Semigroup](_output: NatHK[IdHK,λ[(Σ[_],A) => (A=>W)]]) = new WriterTrans[W]{
+      val S = Semigroup[W]
+      val output = _output
+    }
   }
 
   /* IO algebras */
@@ -181,7 +206,7 @@ class MonadTrans extends FunSpec with Matchers{
           IOState(List(),List("hi!")))
     }
 
-    it("works for plain StateT[Writer,IOState,?] with enhanced interpreter (WriterT)"){
+    it("works for plain WriterT[State[IOState,?],S,?] with enhanced interpreter (WriterT)"){
 
       type Program[T] = WriterT[State[IOState,?],InstLog[IO.Σ],T]
 
