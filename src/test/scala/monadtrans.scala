@@ -85,10 +85,11 @@ class MonadTrans extends FunSpec with Matchers{
         io(inst) :++>> ( out => List(Log(inst,out)))
       }
 
-    def apply[TC[_[_]],P[_]](iso: Alg.Iso[TC])(implicit
+    def apply[TC[_[_]],Σ[_],P[_]](implicit
+      iso: Alg.Iso.Aux[TC,Σ],
       tc: TC[P],
-      M: MonadTell[P,InstLog[iso.Σ]]): TC[P] =
-      iso.to[P](tc) |> applyF[iso.Σ,P](M) |> iso.from[P]
+      M: MonadTell[P,InstLog[Σ]]): TC[P] =
+      iso.to[P](tc) |> applyF[Σ,P](M) |> iso.from[P]
   }
 
   /* WriterT */
@@ -172,7 +173,7 @@ class MonadTrans extends FunSpec with Matchers{
       implicit val ml = WriterT.writerTMonadListen[Id,InstLog[IO.Σ]]
 
       echo[Program]()(
-        debugTell[IO,Program](IO.iso),
+        debugTell[IO,IO.Σ,Program],
         Monad[Program]
       ).exec(IOState(List("hi!"),List())) shouldBe
         Writer[InstLog[IO.Σ],IOState](
