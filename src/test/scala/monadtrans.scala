@@ -15,6 +15,10 @@ class MonadTrans extends FunSpec with Matchers{
       def to[F[_]](p: TC[F]): Alg[Σ,F]
       def from[F[_]](p: Alg[Σ,F]): TC[F]
     }
+
+    object Iso{
+      type Aux[TC[_[_]],S[_]] = Iso[TC]{ type Σ[T] = S[T] }
+    }
   }
 
   trait Lift[T[_[_],_]]{
@@ -33,60 +37,89 @@ class MonadTrans extends FunSpec with Matchers{
 
   implicit def MTellState[S,L,F[_]: MonadListen[?[_],L]] = new MonadListen[StateT[F,S,?],L]{
     def point[A](a: => A) = MonadState[StateT[F,S,?],S].point(a)
-    def bind[A,B](p: StateT[F,S,A])(f: A => StateT[F,S,B]) = 
+    def bind[A,B](p: StateT[F,S,A])(f: A => StateT[F,S,B]) =
       MonadState[StateT[F,S,?],S].bind(p)(f)
-    def writer[A](w: L, v: A): StateT[F,S,A] = 
+    def writer[A](w: L, v: A): StateT[F,S,A] =
       StateT{ s => MonadListen[F,L].writer(w,v).map((s,_)) }
     def listen[A](p: StateT[F,S,A]): StateT[F,S,(A,L)] = ???
   }
 
   /** MonadTell */
 
+  case class Log[Σ[_],T](inst: Σ[T], out: T)
+
+  type InstLog[Σ[_]] = List[Log[Σ,_]]
+
   object MonadTellTrans{
-    
-    case class Log[Σ[_],T](inst: Σ[T], out: T)
 
-    type InstLog[Σ[_]] = List[Log[Σ,_]]
-
-    def tellF[Σ[_],P[_]: MonadTell[?[_],InstLog[Σ]]]: Alg[Σ,P] => Alg[Σ,P] = io =>
-      λ[Alg[Σ,P]]{ inst => 
-        io(inst) :++>> ( out => List(Log(inst,out))) 
+    def debugF[Σ[_],P[_]: MonadTell[?[_],InstLog[Σ]]]: Alg[Σ,P] => Alg[Σ,P] = io =>
+      λ[Alg[Σ,P]]{ inst =>
+        io(inst) :++>> ( out => List(Log(inst,out)))
       }
 
-    def tell[TC[_[_]],P[_]](iso: Alg.Iso[TC])(implicit 
+    // def debug[TC[_[_]],P[_]](implicit
+    //   iso: Alg.Iso[TC],
+    //   M: MonadTell[P,InstLog[iso.Σ]]): TC[P] => TC[P] =
+
+    def debug[TC[_[_]],P[_]](iso: Alg.Iso[TC])(implicit
       tc: TC[P],
       M: MonadTell[P,InstLog[iso.Σ]]): TC[P] =
-      iso.to[P](tc) |> tellF[iso.Σ,P](M) |> iso.from[P]
+      iso.to[P](tc) |> debugF[iso.Σ,P](M) |> iso.from[P]
 
-    // def tell[TC[_[_]], S[_], P[_]: MonadTell[?[_],List[Log[S,_]]]](tc: TC[P])(implicit
-    //   iso: Alg.Iso[TC]{ type Σ[T] = S[T] }): TC[P] = 
-    //   iso.to[P](tc) |> tell[S,P] |> iso.from[P]
+    // def debug[TC[_[_]], S[_], P[_]: MonadTell[?[_],List[Log[S,_]]]](tc: TC[P])(implicit
+    //   iso: Alg.Iso[TC]{ type Σ[T] = S[T] }): TC[P] =
+    //   iso.to[P](tc) |> debug[S,P] |> iso.from[P]
   }
 
   /** With monadtrans */
 
-  trait Trans[T[_[_],_]]{
-    
-    def transF[Σ[_],P[_]: Functor]: Alg[Σ,P] => Alg[Σ,T[P,?]]
+  trait TransS[T[_[_],_[_],_]]{
 
-    def trans[TC[_[_]],P[_]: Functor](implicit 
-      iso: Alg.Iso[TC], tc: TC[P]): TC[T[P,?]] =
-      iso.from[T[P,?]](transF[iso.Σ,P].apply(iso.to[P](tc)))
-  }
+    def enhance2[Σ[_],P[_]: Functor]: λ[A => (P[A],Σ[A])] ~> T[P,Σ,?]
 
-  object DebugTrans{
-    import MonadTellTrans.{InstLog, Log}
-    
-    def debugF[Σ[_],P[_]: Functor]: Alg[Σ,P] => Alg[Σ,WriterT[P,InstLog[Σ],?]] = alg =>
-      λ[Alg[Σ,WriterT[P,InstLog[Σ],?]]]{ inst => 
-        Lift.liftWriterT[InstLog[Σ]].lift[P].apply(alg(inst)) :++>> ( out => List(Log(inst,out))) 
+    def transF2[Σ[_],P[_]: Functor]: Alg[Σ,P] => Alg[Σ,T[P,Σ,?]] = alg =>
+      λ[Alg[Σ,T[P,Σ,?]]]{ inst =>
+        enhance2[Σ,P].apply(alg(inst),inst)
       }
 
-    def debug[TC[_[_]],P[_]: Functor](implicit 
-      iso: Alg.Iso[TC],
-      tc: TC[P]): TC[WriterT[P,InstLog[iso.Σ],?]] =
+    def enhance[Σ[_],P[_]: Functor]: λ[A => (T[P,Σ,A],Σ[A])] ~> T[P,Σ,?]
+
+    def transF[Σ[_],P[_]: Functor](implicit L: Lift[T[?[_],Σ,?]]): Alg[Σ,P] => Alg[Σ,T[P,Σ,?]] = alg =>
+      λ[Alg[Σ,T[P,Σ,?]]]{ inst =>
+        enhance[Σ,P].apply(L.lift[P].apply(alg(inst)),inst)
+      }
+
+    def trans[TC[_[_]],Σ[_],P[_]: Functor](implicit
+      iso: Alg.Iso.Aux[TC,Σ], tc: TC[P], L: Lift[T[?[_],Σ,?]]): TC[T[P,Σ,?]] =
+      iso.from[T[P,Σ,?]](transF[Σ,P].apply(iso.to[P](tc)))
+  }
+
+  object DebugTrans extends TransS[λ[(P[_],Σ[_],T) => WriterT[P,InstLog[Σ],T]]]{
+
+    def enhance[Σ[_],P[_]: Functor] =  λ[λ[A => (WriterT[P,InstLog[Σ],A],Σ[A])] ~> WriterT[P,InstLog[Σ],?]]{
+      case (w,inst) => w :++>> ( out => List(Log(inst,out)))
+    }
+
+    def enhance2[Σ[_],P[_]: Functor] = new (λ[A => (P[A],Σ[A])] ~> WriterT[P,InstLog[Σ],?]){
+      def apply[A](v: (P[A],Σ[A])) = v match {
+        case (p,inst) => WriterT[P,InstLog[Σ],A](p map ((List(),_))) :++>> {
+          out: A => List(Log(inst,out))
+        }
+      }
+    }
+
+
+
+    // def transF[Σ[_],P[_]: Functor]: Alg[Σ,P] => Alg[Σ,WriterT[P,InstLog[Σ],?]] = alg =>
+    //   λ[Alg[Σ,WriterT[P,InstLog[Σ],?]]]{ inst =>
+    //     Lift.liftWriterT[InstLog[Σ]].lift[P].apply(alg(inst)) :++>> ( out => List(Log(inst,out)))
+    //   }
+
+    def debug[TC[_[_]],Σ[_],P[_]: Functor](implicit
+      iso: Alg.Iso.Aux[TC,Σ],
+      tc: TC[P], L: Lift[WriterT[?[_],InstLog[Σ],?]]): TC[WriterT[P,InstLog[iso.Σ],?]] = trans[TC,iso.Σ,P]
       // iso.to[P](_) andThen debugF[iso.Σ,P] andThen iso.from[WriterT[P,InstLog[iso.Σ],?]](_)
-      iso.from[WriterT[P,InstLog[iso.Σ],?]](debugF[iso.Σ,P].apply(iso.to[P](tc)))
+      // iso.from[WriterT[P,InstLog[iso.Σ],?]](debugF[iso.Σ,P].apply(iso.to[P](tc)))
   }
 
   /* IO algebras */
@@ -96,7 +129,7 @@ class MonadTrans extends FunSpec with Matchers{
     def write(msg: String): P[Unit]
   }
 
-  object IO{ self => 
+  object IO{ self =>
 
     sealed abstract class Σ[T]
     case class read() extends Σ[String]
@@ -138,10 +171,10 @@ class MonadTrans extends FunSpec with Matchers{
 
   /** IO Programs */
 
-  def echo[P[_]]()(implicit io: IO[P], m: Monad[P]): P[String] = 
-    io.read() >>! io.write 
+  def echo[P[_]]()(implicit io: IO[P], m: Monad[P]): P[String] =
+    io.read() >>! io.write
 
-  /** tests */ 
+  /** tests */
 
   describe("Echo program"){
     it("works for State[IOState,?]"){
@@ -161,7 +194,7 @@ class MonadTrans extends FunSpec with Matchers{
       implicit val ml = WriterT.writerTMonadListen[Id,InstLog[IO.Σ]]
 
       echo[Program]()(
-        MonadTellTrans.tell[IO,Program](IO.iso),
+        MonadTellTrans.debug[IO,Program](IO.iso),
         Monad[Program]
       ).exec(IOState(List("hi!"),List())) shouldBe
         Writer[InstLog[IO.Σ],IOState](
@@ -170,13 +203,12 @@ class MonadTrans extends FunSpec with Matchers{
     }
 
     it("works for plain StateT[Writer,IOState,?] with enhanced interpreter (WriterT)"){
-      import MonadTellTrans._
       import DebugTrans._
 
       type Program[T] = WriterT[State[IOState,?],InstLog[IO.Σ],T]
-      
+
       echo[Program]()(
-        debug[IO,State[IOState,?]],
+        debug[IO,IO.Σ,State[IOState,?]],
         Monad[Program]
       ).run.eval(IOState(List("hi!"),List())) shouldBe
         (List(Log(IO.read(),"hi!"),Log(IO.write("hi!"),())),"hi!")
@@ -186,12 +218,12 @@ class MonadTrans extends FunSpec with Matchers{
   /** */
   // trait MonadTransLift[T[_[_],_],TC[_[_]]]{
 
-  //   def tellF[Σ[_],P[_]: MonadTell[?[_],InstLog[Σ]]]: Alg[Σ,P] => Alg[Σ,P] = io =>
+  //   def debugF[Σ[_],P[_]: MonadTell[?[_],InstLog[Σ]]]: Alg[Σ,P] => Alg[Σ,P] = io =>
 
-  //   def tell[TC[_[_]],P[_]](iso: Alg.Iso[TC])(implicit 
+  //   def debug[TC[_[_]],P[_]](iso: Alg.Iso[TC])(implicit
   //     tc: TC[P],
   //     M: MonadTell[P,InstLog[iso.Σ]]): TC[P] =
-  //     iso.to[P](tc) |> tellF[iso.Σ,P](M) |> iso.from[P]
+  //     iso.to[P](tc) |> debugF[iso.Σ,P](M) |> iso.from[P]
 
   // }
 
