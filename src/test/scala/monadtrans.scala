@@ -41,6 +41,8 @@ class MonadTransS extends FunSpec with Matchers{
 
   type IdHK[F[_],T] = F[T]
 
+  /** Based on MonadTrans */
+
   trait TransS2[T[_[_],_[_],_]]{
 
     def enhance[Σ[_],P[_]: Monad]: Alg[Σ, λ[A => (A => T[P,Σ,A])]]
@@ -67,6 +69,8 @@ class MonadTransS extends FunSpec with Matchers{
     }
   }
 
+  /** Based on Lift */
+
   trait TransS[T[_[_],_[_],_]]{
 
     def enhance[Σ[_],P[_]: Functor]: λ[A => (T[P,Σ,A],Σ[A])] ~> T[P,Σ,?]
@@ -82,21 +86,6 @@ class MonadTransS extends FunSpec with Matchers{
       tc |> (iso.to[P](_)) |> transF[Σ,P] |> iso.from[T[P,Σ,?]]
   }
 
-  trait Trans[T[_[_],_]]{
-
-    def enhance[Σ[_],P[_]: Functor]: λ[A => (T[P,A],Σ[A])] ~> T[P,?]
-
-    def transF[Σ[_],P[_]: Functor](implicit L: Lift[T]): Alg[Σ,P] => Alg[Σ,T[P,?]] = alg =>
-      λ[Alg[Σ,T[P,?]]]{ inst =>
-        enhance[Σ,P].apply(L.lift[P].apply(alg(inst)),inst)
-      }
-
-    def apply[TC[_[_]],Σ[_],P[_]: Functor](implicit
-      iso: Alg.Iso.Aux[TC,Σ], tc: TC[P], L: Lift[T]): TC[T[P,?]] =
-      tc |> (iso.to[P](_)) |> transF[Σ,P] |> iso.from[T[P,?]]
-  }
-
-
   trait WriterTrans[W[Σ[_]]] extends TransS[λ[(P[_],Σ[_],A) => WriterT[P,W[Σ],A]]]{
     implicit def S[Σ[_]]: Semigroup[W[Σ]]
 
@@ -106,6 +95,8 @@ class MonadTransS extends FunSpec with Matchers{
       case (w,inst) => w :++>> output(inst)
     }
   }
+
+  /** StateT listen */
 
   implicit def MTellState[S,L,F[_]: MonadListen[?[_],L]] = new MonadListen[StateT[F,S,?],L]{
     def point[A](a: => A) = MonadState[StateT[F,S,?],S].point(a)
