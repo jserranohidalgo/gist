@@ -1,4 +1,5 @@
 package org.hablapps.gist.traversal
+package test
 
 sealed abstract class Tree[A]
 case class Leaf[A]() extends Tree[A]

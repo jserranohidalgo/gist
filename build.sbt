@@ -39,6 +39,7 @@ scalacOptions ++= Seq(
   "-Ypartial-unification",
   // "-Xprint:typer",
   // "-Xlog-implicit-conversions",
+  "-explaintypes", 
   "-feature",
   "-language:implicitConversions",
   "-language:postfixOps",

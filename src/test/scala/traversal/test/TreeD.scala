@@ -1,5 +1,6 @@
 package org.hablapps.gist.traversal
-package treedep
+package test
+package dep
 
 import shapeless.{Nat, Succ, _0}
 import shapeless.ops.nat.Sum
@@ -30,16 +31,29 @@ object Tree{
     }
   }
 
+  class TreeTraversal[A] extends concrete.Traversal[Aux[A,?],A]{
+    
+    // implicit def leafGetAll[A] = new GetAll[_0,Leaf[A]]{
+    //   // type Out = treedep.Nil[A]
+    //   def apply(t: Leaf[A]) = ??? // Nil()
+    // }
 
-  def InOrder1[A] = new Traversal[Tree[A], A]{
-    def getAll(s: Tree[A]): ListN[A, s.N] = ???
-
-    def putAll(s: Tree[A]): ListN[A, s.N] => Tree[A]{ type N = s.N } = ???
+    // implicit def nodeGetAll[A, 
+    //   NL <: Nat, L <: Tree.Aux[A,NL], LL <: ListN[A], 
+    //   NR <: Nat, R <: Tree.Aux[A,NR], LR <: ListN[A]](implicit 
+    //   gl: GetAll.Aux[NL,L,LL],
+    //   gr: GetAll.Aux[NR,R,LR],
+    //   sum: Sum[NL,NR],
+    //   concat: ListN.Concatenate[A,LL,A::LR]) = new GetAll[Succ[sum.Out], Node[L,A,R]]{
+    //     type Out = concat.Out
+    //     def apply(t: Node[L,A,R]) = 
+    //       concat(gl(t.left), ::(t.root, gr(t.right)))
+    //   }
   }
 
   import scalaz.Applicative, scalaz.syntax.applicative._
 
-  class InOrder[A] extends vanLaarhoven.Traversal[Tree[A], A]{
+  class InOrder[A] extends vanLaarhoven.TraversalD[Tree[A], A]{
 
     implicit object fromLeaf extends Case[Leaf[A]]{
       type S2 = Leaf[A]

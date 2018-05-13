@@ -1,11 +1,10 @@
 package org.hablapps.gist.traversal
-package treedep
 package vanLaarhoven
 
 import shapeless._
 import scalaz.Applicative
 
-class Traversal[S, A]{
+class TraversalD[S, A]{
 
   trait Case[S1 <: S]{
     type S2 <: S

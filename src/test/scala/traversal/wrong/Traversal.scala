@@ -1,4 +1,5 @@
 package org.hablapps.gist.traversal
+package wrong
 
 trait Traversal[S,A]{
   def getAll(s: S): List[A]

@@ -1,11 +1,11 @@
 package org.hablapps.gist
 package traversal
-package vanLaarhoven
+package test
 
 import org.scalatest._
 
 class Test extends FunSpec with Matchers{
-  import traversal.Traversal.Syntax._
+  import wrong.Traversal.Syntax._
   import Tree.Syntax._
   
   describe("Inorder for trees"){
