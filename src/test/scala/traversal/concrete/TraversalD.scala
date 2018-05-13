@@ -3,26 +3,23 @@ package concrete
 
 import shapeless.Nat
 
-trait Traversal[S1[_ <: Nat], A]{
+trait Traversal[S, A]{
 
-  trait GetAll[N <: Nat, T <: S1[N]]{
-    type Out <: ListN.Aux[A,N]
+  trait Extract[T <: S]{
+
+    trait Result{
+      type Content <: ListN[A]
+      def getAll(): Content
+      def putAll(values: Content): T
+    }
+    
+    type Out <: Result
     def apply(t: T): Out
   }
 
-  object GetAll{
-    type Aux[N <: Nat, T <: S1[N], _Out <: ListN.Aux[A,N]] = 
-      GetAll[N, T]{ type Out = _Out }
+  object Extract{
+    type Aux[T <: S, _Out <: Extract[T]#Result] = Extract[T]{ type Out = _Out }
   }
-}
-
-object Traversal{
-
-  object Syntax{
-    implicit class TraversalOps[N <: Nat, S[_ <: Nat], T <: S[N] ,A](
-      t: T)(implicit Trav: Traversal[S,A]){
-      def getAll[A]()(implicit GetAll: Trav.GetAll[N,T]) = 
-        GetAll(t)
-    }
-  }
+  
+  def apply[T <: S](t: T)(implicit E: Extract[T]): E.Out = E(t)
 }
