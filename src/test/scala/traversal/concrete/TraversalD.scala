@@ -16,17 +16,15 @@ trait Traversal[S, T, A, B]{
   }
 
   trait Result{
-    type N <: Nat
-    type OutGet <: ListN.Aux[A,N]
-    type InPut <: ListN.Aux[B,N]
+    type OutGet <: ListN[A]
+    type InPut <: ListN[B]
     type OutPut <: T
     def getAll(): OutGet
     def putAll(values: InPut): OutPut
   }
 
   object Result{
-    type Aux[_N <: Nat, _OutGet <: ListN.Aux[A,_N], _InPut <: ListN.Aux[B,_N], _OutPut <: T] = Result{
-      type N = _N
+    type Aux[_OutGet <: ListN[A], _InPut <: ListN[B], _OutPut <: T] = Result{
       type OutGet = _OutGet
       type InPut = _InPut
       type OutPut = _OutPut
