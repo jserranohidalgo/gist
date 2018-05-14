@@ -2,6 +2,7 @@ package org.hablapps.gist.traversal
 package concrete
 
 import shapeless.Nat
+import ListN.Length
 
 trait Traversal[S, T, A, B]{
 
@@ -19,6 +20,11 @@ trait Traversal[S, T, A, B]{
     type OutGet <: ListN[A]
     type InPut <: ListN[B]
     type OutPut <: T
+    
+    type N <: Nat
+    val GetLength: Length.Aux[A,OutGet,N]
+    val PutLength: Length.Aux[B,InPut,N]
+
     def getAll(): OutGet
     def putAll(values: InPut): OutPut
   }

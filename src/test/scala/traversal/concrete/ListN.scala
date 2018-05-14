@@ -9,6 +9,23 @@ case class ::[A, L <: ListN[A]](head: A, tail: L) extends ListN[A]
 
 object ListN{
   
+  trait Length[A, L <: ListN[A]]{
+    type Out <: Nat
+  }
+
+  object Length{
+    type Aux[A, L <: ListN[A], N <: Nat] = Length[A,L]{ type Out = N }
+
+    implicit def nilLength[A] = new Length[A,Nil[A]]{
+      type Out = _0
+    }
+
+    implicit def consLength[A, T <: ListN[A]](implicit tailL: Length[A,T]) = 
+      new Length[A, A :: T]{
+        type Out = Succ[tailL.Out]
+      }
+  }
+
   trait Concatenate[A, L1 <: ListN[A], L2 <: ListN[A]]{
     type Out <: ListN[A]
     def apply(l1: L1, l2: L2): Out
@@ -16,6 +33,10 @@ object ListN{
   }
 
   object Concatenate{
+    
+    type Aux[A, L1 <: ListN[A], L2 <: ListN[A], L <: ListN[A]] = Concatenate[A,L1,L2]{
+      type Out = L
+    }
 
     def apply[A, L1 <: ListN[A], L2 <: ListN[A]](
       l1: L1, l2: L2)(implicit
