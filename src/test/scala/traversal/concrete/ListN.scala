@@ -19,27 +19,33 @@ object ListN{
   trait Concatenate[A, L1 <: ListN[A], L2 <: ListN[A]]{
     type Out <: ListN[A]
     def apply(l1: L1, l2: L2): Out
+    def reverse(out: Out): (L1, L2)
   }
 
   object Concatenate{
 
     def apply[A, L1 <: ListN[A], L2 <: ListN[A]](
       l1: L1, l2: L2)(implicit
-      conc: Concatenate[A, L1, L2]): conc.Out = 
-      conc(l1,l2) 
+      conc: Concatenate[A, L1, L2]): conc.Out =
+      conc(l1,l2)
 
-    implicit def nilCase[A, L2 <: ListN[A]] = 
+    implicit def nilCase[A, L2 <: ListN[A]] =
       new Concatenate[A, Nil[A], L2]{
         type Out = L2
         def apply(l1: Nil[A], l2: L2) = l2
+        def reverse(out: L2): (Nil[A],L2) = (Nil(),out)
       }
 
-    implicit def consCase[A, L1 <: ListN[A], L2 <: ListN[A]](implicit 
+    implicit def consCase[A, L1 <: ListN[A], L2 <: ListN[A]](implicit
       conc: Concatenate[A, L1, L2]) =
       new Concatenate[A, ::[A, L1], L2]{
         type Out = ::[A, conc.Out]
-        def apply(l1: ::[A,L1], l2: L2): Out = 
+        def apply(l1: ::[A,L1], l2: L2): Out =
           ::(l1.head, conc(l1.tail, l2))
+        def reverse(out: ::[A, conc.Out]): (::[A,L1],L2) =
+          conc.reverse(out.tail) match {
+            case (l1,l2) => (::(out.head, l1),l2)
+          }
       }
   }
 }

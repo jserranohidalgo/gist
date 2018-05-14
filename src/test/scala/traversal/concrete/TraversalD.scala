@@ -5,21 +5,24 @@ import shapeless.Nat
 
 trait Traversal[S, A]{
 
-  trait Extract[T <: S]{
+  trait Result[In <: S]{
+    type Content <: ListN[A]
+    def getAll(): Content
+    def putAll(values: Content): In
+  }
 
-    trait Result{
-      type Content <: ListN[A]
-      def getAll(): Content
-      def putAll(values: Content): T
-    }
-    
-    type Out <: Result
-    def apply(t: T): Out
+  object Result{
+    type Aux[In <: S, _Content <: ListN[A]] = Result[In]{ type Content = _Content }
+  }
+
+  trait Extract[In <: S]{
+    type Out <: Result[In]
+    def apply(t: In): Out
   }
 
   object Extract{
-    type Aux[T <: S, _Out <: Extract[T]#Result] = Extract[T]{ type Out = _Out }
+    type Aux[In <: S, _Out <: Result[In]] = Extract[In]{ type Out = _Out }
   }
-  
-  def apply[T <: S](t: T)(implicit E: Extract[T]): E.Out = E(t)
+
+  def apply[In <: S](t: In)(implicit E: Extract[In]): E.Out = E(t)
 }
