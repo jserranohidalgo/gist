@@ -13,16 +13,18 @@ object Tree{
 
   import concrete.{Nil, ListN, ::}, ListN.Concatenate
 
-  class Of[A]{
-    implicit object InOrder extends concrete.Traversal[Tree[A],A]{
+  class Of[A,B]{
+    implicit object InOrder extends concrete.Traversal[Tree[A],Tree[B],A,B]{
 
       implicit val leafInOrder = new Extract[Leaf[A]]{
-        type Out = Result[Leaf[A]]{ type Content = Nil[A] }
+        type Out = Result.Aux[Leaf[B], _0]
 
-        def apply(tree: Leaf[A]) = new Result[Leaf[A]]{
-          type Content = Nil[A]
+        def apply(tree: Leaf[A]) = new Result{
+          type Out = Leaf[B]
+          type N = _0
+
           def getAll() = Nil()
-          def putAll(nil: Nil[A]) = Leaf()
+          def putAll(nil: ListN.Aux[B,_0]) = Leaf()
         }
       }
 
@@ -31,32 +33,37 @@ object Tree{
         LL <: ListN[A],
         RT <: Tree[A],
         RL <: ListN[A]](implicit
-        extractLeft: Extract.Aux[LT,Result.Aux[LT,LL]],
-        extractRight: Extract.Aux[RT,Result.Aux[RT,RL]],
+        extractLeft: Extract.Aux[LT, Result.Aux[LT,LL]],
+        extractRight: Extract.Aux[RT, Result.Aux[RT,RL]],
         concatenate: Concatenate[A, LL, A::RL]) =
 
         new Extract[Node[LT,A,RT]]{
-          type Out = Result[Node[LT,A,RT]]{ type Content = concatenate.Out }
+          type Out = Result.Aux[Node[LT,B,RT], concatenate.N]
 
-          def apply(tree: Node[LT,A,RT]) = new Result[Node[LT,A,RT]]{
-            type Content = concatenate.Out
+          def apply(tree: Node[LT,A,RT]) = new Result{
+            type Out = Node[LT,B,RT]
+            type N = concatenate.N
 
-            def getAll(): Content =
+            def getAll(): ListN.Aux[A,N] =
               concatenate(extractLeft(tree.left).getAll,
                 ::(tree.root, extractRight(tree.right).getAll))
 
-            def putAll(content: Content) =
-              concatenate.reverse(content) match {
-                case (ll, ::(a, rl)) =>
-                  Node(extractLeft(tree.left).putAll(ll), a, extractRight(tree.right).putAll(rl))
-              }
+            def putAll(content: ListN.Aux[B,N]) = ???
+              // concatenate.reverse(content) match {
+              //   case (ll, ::(b, rl)) =>
+              //     Node(extractLeft(tree.left).putAll(ll), b, extractRight(tree.right).putAll(rl))
+              // }
           }
         }
     }
   }
 
-  object Of{
-    def apply[A]: Of[A] = new Of[A]
+  object Monomorphic{
+    def apply[A]: Of[A,A] = new Of[A,A]
+  }
+
+  object Polymorphic{
+    def apply[A,B]: Of[A,B] = new Of[A,B]
   }
 }
 
