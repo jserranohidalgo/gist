@@ -20,8 +20,8 @@ trait Affine[S, T, A, B]{
     type Content[x] <: Option[x]
     type Out <: T
     
-    def getAll(): Content[A]
-    def putAll(values: Content[B]): Out
+    def get(): Content[A]
+    def put(value: Content[B]): Out
   }
 
   object Result{
