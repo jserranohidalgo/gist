@@ -17,11 +17,11 @@ trait Traversal[S, T, A, B]{
   }
 
   trait Result{
+    type N <: Nat
     type OutGet <: List[A]
     type InPut <: List[B]
     type OutPut <: T
     
-    type N <: Nat
     val GetLength: Length.Aux[A,OutGet,N]
     val PutLength: Length.Aux[B,InPut,N]
 
