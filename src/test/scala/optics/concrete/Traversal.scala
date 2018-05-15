@@ -1,5 +1,5 @@
-package org.hablapps.gist.traversal
-package wrong
+package org.hablapps.gist.optics
+package concrete
 
 trait Traversal[S,A]{
   def getAll(s: S): List[A]

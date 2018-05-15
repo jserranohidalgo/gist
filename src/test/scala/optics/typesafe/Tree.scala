@@ -1,5 +1,5 @@
-package org.hablapps.gist.traversal
-package test
+package org.hablapps.gist.optics
+package typesafe
 
 import shapeless.{Nat, Succ, _0}
 import shapeless.ops.nat.Sum
@@ -11,10 +11,10 @@ case class Node[T1 <: Tree[A], A, T2 <: Tree[A]](
 
 object Tree{
 
-  import concrete.{Nil, ListN, ::}, ListN.{Length, Concatenate}
+  import List.{Length, Concatenate}
 
   class Of[A,B]{
-    implicit object InOrder extends concrete.Traversal[Tree[A],Tree[B],A,B]{
+    implicit object InOrder extends typesafe.Traversal[Tree[A],Tree[B],A,B]{
 
       implicit val leafInOrder = new Extract[Leaf[A]]{
         type Out = Result.Aux[Nil[A],Nil[B],Leaf[B]]
@@ -35,15 +35,15 @@ object Tree{
 
       implicit def nodeInOrder[
         L <: Tree[A],
-        LG <: ListN[A],
-        LPI <: ListN[B],
+        LG <: List[A],
+        LPI <: List[B],
         LPO <: Tree[B],
         R <: Tree[A],
-        RG <: ListN[A],
-        RPI <: ListN[B],
+        RG <: List[A],
+        RPI <: List[B],
         RPO <: Tree[B],
-        CG <: ListN[A],
-        CP <: ListN[B],
+        CG <: List[A],
+        CP <: List[B],
         _N <: Nat](implicit
         extractL: Extract.Aux[L, Result.Aux[LG,LPI,LPO]],
         extractR: Extract.Aux[R, Result.Aux[RG,RPI,RPO]],

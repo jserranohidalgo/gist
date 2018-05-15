@@ -1,8 +1,8 @@
-package org.hablapps.gist.traversal
-package concrete
+package org.hablapps.gist.optics
+package typesafe
 
 import shapeless.Nat
-import ListN.Length
+import List.Length
 
 trait Traversal[S, T, A, B]{
 
@@ -17,8 +17,8 @@ trait Traversal[S, T, A, B]{
   }
 
   trait Result{
-    type OutGet <: ListN[A]
-    type InPut <: ListN[B]
+    type OutGet <: List[A]
+    type InPut <: List[B]
     type OutPut <: T
     
     type N <: Nat
@@ -30,7 +30,7 @@ trait Traversal[S, T, A, B]{
   }
 
   object Result{
-    type Aux[_OutGet <: ListN[A], _InPut <: ListN[B], _OutPut <: T] = Result{
+    type Aux[_OutGet <: List[A], _InPut <: List[B], _OutPut <: T] = Result{
       type OutGet = _OutGet
       type InPut = _InPut
       type OutPut = _OutPut

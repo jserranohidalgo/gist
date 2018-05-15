@@ -1,8 +1,5 @@
-package org.hablapps.gist.traversal
-package concrete
-
-import shapeless.Nat
-import ListN.Length
+package org.hablapps.gist.optics
+package typesafe
 
 trait Affine[S, T, A, B]{
 

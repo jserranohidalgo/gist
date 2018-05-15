@@ -1,13 +1,11 @@
 package org.hablapps.gist
-package traversal
-package test
+package optics
+package typesafe
 
 import org.scalatest._
 
 class Test extends FunSpec with Matchers{
-  import shapeless._
-  import concrete.{ListN, Nil, ::}
-
+  
   describe("Monomorphic traversals"){
 
     val TreeOfInt = Tree.Monomorphic[Int]
