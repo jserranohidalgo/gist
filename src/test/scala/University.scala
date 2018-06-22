@@ -4,7 +4,7 @@ package university
 import scalaz._, Scalaz._
 
 
-object UniversityManyDep extends App {
+object UniversityMany extends App {
 
   trait UniversityRepo[P[_],Univ] {
     val M: MonadState[P, Univ]
@@ -58,7 +58,7 @@ object UniversityManyDep extends App {
             def bind[A,B](fa: State[University,A])(f: A => State[University,B]) =
               Monad[State[University,?]].bind(fa)(f)
             def init = get
-            def get() = State.gets[University, Department](_ => dep)
+            def get() = State.state[University, Department](dep)
             def put(dep: Department) = univ.M.modify{ univ =>
               univ.copy(departs = univ.departs.updated(name, dep))
             }
