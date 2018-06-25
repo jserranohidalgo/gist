@@ -18,6 +18,9 @@ trait Setter[P[_],S]{
 trait Field[P[_],S]{
   val get: Getter[P,S]
   val put: Setter[P,S]
+
+  def modify(f: S => S)(implicit B: Bind[P]): P[Unit] = 
+    get() >>= { s => put(f(s)) }
 }
 
 trait ListP[Alg[_[_],_],P[_],S]{
@@ -74,9 +77,7 @@ trait Logic[P[_],U]{
   val univ: University[P,U]
 
   def doubleBudget(implicit M: Monad[P]): P[List[Unit]] =
-    univ.deps traverse { dep =>
-      dep.budget.get() >>= (b => dep.budget.put(b * 2))
-    }
+    univ.deps traverse { _.budget.modify(_*2) }
   
   // should be reused
   def getDepts(implicit M: Monad[P]): P[List[univ.D]] = 
