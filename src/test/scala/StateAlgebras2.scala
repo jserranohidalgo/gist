@@ -31,7 +31,14 @@ trait Church[Alg[_[_]], T]{
   def apply2[P[_]]: Program[P]
 }
 
+trait StoreN[P[_], S]{
+  type N
+  def get: P[List[A]]
+  def put(as: List[A]): P[List[Unit]]
+}
+
 trait ListP[Alg[_[_],_],P[_],S]{
+  def apply: P[StoreN[P, S]]
   val apply: P[List[Alg[P,S]]]
 
   def apply[T](f: Alg[P,S] => P[T]): P[List[T]]
@@ -78,6 +85,11 @@ import Primitive._
 trait Department[P[_],D]{
   val self: Field[P,D]
   val budget: IntegerP[P]
+}
+
+trait Department[P[_],D]{
+  val self: P[Field[P[List[?]],D]]
+  val budget: P[IntegerP[P[List[?]]]]
 }
 
 trait University[P[_],U]{
