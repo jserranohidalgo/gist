@@ -1,4 +1,4 @@
-name := "hablapps"
+name := "gist"
 
 scalaVersion := "2.11.8"
 
@@ -7,6 +7,8 @@ scalaOrganization := "org.typelevel"
 scalaBinaryVersion := "2.11"
 
 organization := "org.hablapps"
+
+version := "0.1-SNAPSHOT"
 
 addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.3")
 
@@ -17,7 +19,7 @@ resolvers ++= Seq(
 
 libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.0",
-  "org.typelevel" %% "cats" % "0.8.1",
+  "org.typelevel" %% "cats" % "0.9.0",
   "com.typesafe.akka" %% "akka-http-experimental" % "2.4.11",
   "com.typesafe.akka" %% "akka-http-spray-json-experimental" % "2.4.11",
   "com.lihaoyi" %% "sourcecode" % "0.1.2",
