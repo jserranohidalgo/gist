@@ -13,22 +13,28 @@ object Term{
 
   implicit object Sem extends SystemT[Term]{
 
-    def K[T1, T2]: Term[T1 => T2 => T1] =
-      ???
+    def K[T1, T2] = new Term[T1 => T2 => T1]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.K
+    }
 
-    def S[T1, T2, T3]: Term[(T1 => T2 => T3) => (T1 => T2) => (T1 => T3)] =
-      ???
+    def S[T1, T2, T3] = new Term[(T1 => T2 => T3) => (T1 => T2) => (T1 => T3)]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.S
+    }
 
-    def app[T1, T2](f: Term[T1 => T2], t1: Term[T1]): Term[T2] =
-      ???
+    def app[T1, T2](f: Term[T1 => T2], t1: Term[T1]) = new Term[T2]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.app(f(S), t1(S))
+    }
 
-    def zero: Term[Int] =
-      ???
+    def zero = new Term[Int]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.zero
+    }
 
-    def succ: Term[Int => Int] =
-      ???
+    def succ = new Term[Int => Int]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.succ
+    }
 
-    def rec[T]: Term[T => (Int => T => T) => (Int => T)] =
-      ???
+    def rec[T] = new Term[T => (Int => T => T) => (Int => T)]{
+      def apply[P[_]](implicit S: SystemT[P]) = S.rec
+    }
   }
 }

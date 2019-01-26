@@ -15,3 +15,10 @@ trait SystemT[P[_]]{
 
   def rec[T]: P[T => (Int => T => T) => (Int => T)]
 }
+
+object SystemT{
+
+  implicit val ShowSemI: SystemT[λ[T => String]] = semantics.ShowSem
+
+  implicit val StandardSem: SystemT[cats.Id] = semantics.Standard
+}
