@@ -13,10 +13,5 @@ trait SystemT[P[_]]{
 
   def succ: P[Int => Int]
 
-  def rec[T]: P[T => (Int => T => T) => (Int => P[T])]
-}
-
-object SystemT{
-
-
+  def rec[T]: P[T => (Int => T => T) => (Int => T)]
 }

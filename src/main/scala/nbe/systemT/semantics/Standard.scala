@@ -1,6 +1,6 @@
 package org.hablapps.gist.nbe
 package systemT
-package standard
+package semantics
 
 object Standard extends SystemT[cats.Id]{
 
