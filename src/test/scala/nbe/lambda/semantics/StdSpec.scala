@@ -16,6 +16,8 @@ class StdSpec extends FunSpec with Matchers{
 
       ex2[Unit]((3, ()))(4) shouldBe 7
 
+      ex4((3, (4, ()))) shouldBe 7
+
       ex3[Unit](())(_ + 1) shouldBe 4
     }
   }

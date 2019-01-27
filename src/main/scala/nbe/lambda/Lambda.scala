@@ -18,7 +18,7 @@ trait Lambda[P[E, T]]{
 
 object Lambda{
 
-  // implicit val ShowSemI: SystemT[λ[T => String]] = semantics.ShowSem
+  implicit val ShowSem: Lambda[semantics.Show] = semantics.ShowSem
 
   implicit val StdSem: Lambda[Function1] = semantics.Standard
 }
