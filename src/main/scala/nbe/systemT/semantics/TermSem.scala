@@ -9,7 +9,7 @@ trait Term[T]{
 object Term{
 
   def norm[T]: Term[T] => Term[T] =
-    t => NonStdSem.reify(t[NonStdSem])
+    t => NonStd.reify(t[NonStd])
 
   implicit object Sem extends SystemT[Term]{
 

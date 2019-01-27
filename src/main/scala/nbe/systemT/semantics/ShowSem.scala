@@ -12,7 +12,7 @@ object ShowSem extends SystemT[Show]{
 
   def zero = "0"
 
-  def succ = "S"
+  def succ = "s"
 
   def rec[T] = "rec"
 }

@@ -48,6 +48,10 @@ class TermSpec extends FunSpec with Matchers{
     it("work"){
 
       Term.norm(Term.Sem.app(Term.Sem.app(add, Term.Sem.zero), Term.Sem.zero))[Show] shouldBe "0"
+
+      val _1 = Term.Sem.app(Term.Sem.succ, Term.Sem.zero)
+
+      Term.norm(Term.Sem.app(Term.Sem.app(add, _1), _1))[Show] shouldBe "(s(s0))"
     }
   }
 }

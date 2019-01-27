@@ -6,16 +6,26 @@ import org.scalatest._
 
 class NonStdSpec extends FunSpec with Matchers{
 
-  val T = Examples[NonStdSem]()
+  val T = Examples[NonStd]()
+  import T._
 
   describe("Reified terms"){
 
     it("works"){
-      NonStdSem.reify(T.I[Int]).apply[λ[T => String]] shouldBe
+      NonStd.reify(I[Int]).apply[Show] shouldBe
         "((SK)K)"
 
-      NonStdSem.reify(T.B[Int, Boolean, String])[λ[T => String]] shouldBe
+      NonStd.reify(B[Int, Boolean, String])[Show] shouldBe
         "((S(KS))K)"
+
+      NonStd.reify(add)[Show] shouldBe
+        "((Srec)(K(Ks)))"
+
+      NonStd.reify(NonStd.Sem.app(add, NonStd.Sem.zero))[Show] shouldBe
+        "((rec0)(Ks))"
+
+      NonStd.reify(NonStd.Sem.app(NonStd.Sem.app(add, NonStd.Sem.zero), NonStd.Sem.zero))[Show] shouldBe
+        "0"
     }
   }
 }
