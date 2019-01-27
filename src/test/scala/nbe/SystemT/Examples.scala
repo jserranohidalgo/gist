@@ -57,4 +57,20 @@ case class Examples[P[_]](implicit ST: SystemT[P]){
     //       ) : P[?14 => ?13 ]
     //   ) : P[?1 => ?3 ]
 
+  // ADD = S·REC·(K·(K·SUCC))
+  def add: P[Int => Int => Int] =
+    ((S: P[(Int => (Int => Int => Int) => (Int => Int)) => (Int => (Int => Int => Int)) => (Int => (Int => Int))])
+      .apply{
+        (rec: P[Int => (Int => Int => Int) => Int => Int])
+      }: P[(Int => (Int => Int => Int)) => (Int => (Int => Int))])
+      .apply{
+        (K: P[(Int => (Int => Int)) => Int => (Int => (Int => Int))]).apply{
+          (K: P[(Int => Int) => Int => (Int => Int)]).apply{
+            succ : P[Int => Int]
+          } : P[Int => (Int => Int)]
+        }: P[Int => (Int => (Int => Int))]
+      }: P[(Int => (Int => Int))]
+
+
+
 }

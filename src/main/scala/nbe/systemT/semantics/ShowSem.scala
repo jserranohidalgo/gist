@@ -2,7 +2,7 @@ package org.hablapps.gist.nbe
 package systemT
 package semantics
 
-object ShowSem extends SystemT[λ[T => String]]{
+object ShowSem extends SystemT[Show]{
 
   def K[T1, T2] = "K"
 

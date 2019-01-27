@@ -43,4 +43,11 @@ class TermSpec extends FunSpec with Matchers{
       isEven(1) shouldBe "false"
     }
   }
+
+  describe("arithmetic functions"){
+    it("work"){
+
+      Term.norm(Term.Sem.app(Term.Sem.app(add, Term.Sem.zero), Term.Sem.zero))[Show] shouldBe "0"
+    }
+  }
 }
