@@ -1,15 +1,17 @@
-package org.hablapps.gist.nbe
+package org.hablapps.gist
 package lambda
+package taglessfinal
+package debruijn
 package semantics
 
 import org.scalatest._
 
 class ShowSpec extends FunSpec with Matchers{
 
-  val L = Examples[Show]()
+  val L = Examples[ShowB]()
   import L._
 
-  describe("Lambda expressions"){
+  ignore("Show lambda expressions - tagless final - de bruijn"){
     it("evaluate to standard functions over typed environments"){
 
       ex1[Unit](0) shouldBe "(1+3)"

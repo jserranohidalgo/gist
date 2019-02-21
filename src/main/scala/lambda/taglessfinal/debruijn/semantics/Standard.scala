@@ -1,5 +1,7 @@
-package org.hablapps.gist.nbe
+package org.hablapps.gist
 package lambda
+package taglessfinal
+package debruijn
 package semantics
 
 object Standard extends Lambda[Function1]{

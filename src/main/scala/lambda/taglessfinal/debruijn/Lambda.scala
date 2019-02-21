@@ -1,5 +1,7 @@
-package org.hablapps.gist.nbe
+package org.hablapps.gist
 package lambda
+package taglessfinal
+package debruijn
 
 trait Lambda[P[E, T]]{
 
@@ -18,7 +20,7 @@ trait Lambda[P[E, T]]{
 
 object Lambda{
 
-  implicit val ShowSem: Lambda[semantics.Show] = semantics.ShowSem
+  implicit val ShowSem: Lambda[ShowB] = semantics.ShowSem
 
   implicit val StdSem: Lambda[Function1] = semantics.Standard
 }

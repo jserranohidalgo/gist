@@ -1,8 +1,10 @@
-package org.hablapps.gist.nbe
+package org.hablapps.gist
 package lambda
+package taglessfinal
+package debruijn
 package semantics
 
-object ShowSem extends Lambda[Show]{
+object ShowSem extends Lambda[ShowB]{
 
   def int[E](i: Int): Int => String =
     _ => i.toString

@@ -1,5 +1,7 @@
-package org.hablapps.gist.nbe
+package org.hablapps.gist
 package lambda
+package taglessfinal
+package debruijn
 package semantics
 
 import org.scalatest._
@@ -9,8 +11,8 @@ class StdSpec extends FunSpec with Matchers{
   val L = Examples[Function1]()
   import L._
 
-  describe("Lambda expressions"){
-    it("evaluate to standard functions over typed environments"){
+  describe("Evaluate lambda expressions - tagless final - de Bruijn"){
+    it("work over typed environments"){
 
       ex1[Unit](()) shouldBe 4
 
