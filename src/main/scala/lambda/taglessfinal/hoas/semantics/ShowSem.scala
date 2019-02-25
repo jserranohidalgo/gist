@@ -10,7 +10,7 @@ object ShowLambda extends Lambda[ShowH]{
     _ => i.toString
 
   def add(i1: ShowH[String])(i2: ShowH[String]): ShowH[String] =
-    c => s"${i1(c)} + ${i2(c)}"
+    c => s"${i1(c)}+${i2(c)}"
 
   def lam[T1, T2](f: ShowH[String] => ShowH[String]): ShowH[String] =
     c => {

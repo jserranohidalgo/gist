@@ -3,7 +3,7 @@ package lambda
 package initial
 package hoas
 
-sealed abstract class Lambda[+P[_], +T]
+sealed abstract class Lambda[P[_], T]
 case class IntL[P[_]](i: Int) extends Lambda[P, Int]
 case class Add[P[_]](i1: Lambda[P, Int], i2: Lambda[P, Int]) extends Lambda[P, Int]
 case class Var[P[_], T](p: P[T]) extends Lambda[P, T]

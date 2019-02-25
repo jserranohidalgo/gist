@@ -10,19 +10,26 @@ object ReadLambda{
 
   val lambdaR = """\(λ(.*?)\.(.*)\)""".r
   val appR = """\((.*) (.*)\)""".r
-  val intR = """\d+""".r
-  val addR = """.*?\+.*?""".r
+  val intR = """(\d+)""".r
+  val addR = """(.*?)\+(.*?)""".r
 
-  def apply(s: String)(env: Map[String, _]): Lambda[Any, Any] = s match {
+  def apply[P[_], T](s: String): Lambda[P, T] =
+    applyEnv(s)(Map())
+
+  def applyEnv[P[_], T](s: String)(env: Map[String, Any]): Lambda[P, T] = s match {
     case lambdaR(v, b) =>
-      Lam[Any, Nothing, Any]{ t1 => apply(b)(env + (v -> t1))}
+      Lam[P, Any, Any]{
+        t1 => applyEnv(b)(env + (v -> t1))
+      }.asInstanceOf[Lambda[P, T]]
     case appR(f, a) =>
-      App[Any, Nothing, Any](apply(f)(env), apply(a)(env))
+      App[P, Any, T](
+        applyEnv(f)(env).asInstanceOf[Lambda[P, Any => T]],
+        applyEnv(a)(env).asInstanceOf[Lambda[P, Any]])
     case intR(i) =>
-      IntL(Integer.parseInt(i))
+      IntL(Integer.parseInt(i)).asInstanceOf[Lambda[P, T]]
     case addR(i, j) =>
-      Add(apply(i)(env), apply(j)(env))
+      Add(applyEnv(i)(env), applyEnv(j)(env)).asInstanceOf[Lambda[P, T]]
     case s =>
-      Var(env(s))
+      env(s).asInstanceOf[Lambda[P, T]]
   }
 }
