@@ -184,7 +184,7 @@ class TPrinterSpec extends FunSpec with Matchers{
 trait TParser[F <: Fmt, X]{
   type Out
 
-  def apply(f: F): String => Option[(Out, X)]
+  def apply(f: F)(cont: X): String => Option[(Out, X)]
 }
 
 object TParser{
@@ -194,18 +194,18 @@ object TParser{
   def LitParser[X] = new TParser[Lit, X]{
     type Out = Unit
 
-    def apply(f: Lit)(cont: String => X): String => Option[(Unit, X)] =
+    def apply(f: Lit)(cont: X): String => Option[(Unit, X)] =
       Read[String].read(_).map{
-        case (_, tail) => ((), cont(tail))
+        case (_, _) => ((), cont)
       }
   }
 
   def ValParser[T: Read, X] = new TParser[Val[T], X]{
     type Out = T
 
-    def apply(f: Val[T])(cont: String => X): String => Option[(T, X)] =
+    def apply(f: Val[T])(cont: X): String => Option[(T, X)] =
       Read[T].read(_).map{
-        case (t, tail) => (t, cont(tail))
+        case (t, tail) => (t, cont)
       }
   }
 
@@ -214,8 +214,13 @@ object TParser{
       P2: TParser.Aux[F2, X, O2]) = new TParser[Cmp[F1, F2], X]{
     type Out = O1
 
-    def apply(f: Cmp[F1, F2])(cont: String => X): String => Option[(O1, X)] =
-      ???
+    def apply(f: Cmp[F1, F2])(cont: X): String => Option[(O1, X)] =
+      s => {
+        val P1(f._f1){ s1 =>
+        P2(f._f2){ s2 =>
+          cont(s1+s2)
+        }
+      }(s)
   }
 }
 
