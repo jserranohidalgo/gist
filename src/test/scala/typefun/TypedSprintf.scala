@@ -16,16 +16,16 @@ object Read{
   def apply[A](implicit R: Read[A]): Read[A] = R
 
   implicit val IntRead = new Read[Int]{
-    val IntPrefix = """(.*?)(\d+)$""".r
+    val IntPrefix = """^(\d+)(.*)""".r
 
     def read(str: String): Option[(String, Int)] = str match {
-      case IntPrefix(tail, i) => Some((tail, Integer.parseInt(i)))
+      case IntPrefix(i, tail) => Some((tail, Integer.parseInt(i)))
       case _ => None
     }
   }
 
   implicit def StrRead(prefix: String) = new Read[String]{
-    val StrPrefix = (s"""(.*)${prefix}$$""").r
+    val StrPrefix = (s"""^${prefix}(.*)""").r
 
     def read(str: String): Option[(String, String)] = {
       str match {
@@ -180,6 +180,8 @@ class TPrinterSpec extends FunSpec with Matchers{
     "hola, number 1"
 }
 
+
+
 import scalaz.StateT, scalaz.std.option._
 
 trait TParser[F <: Fmt, X]{
@@ -202,21 +204,21 @@ object TParser{
   }
 
   implicit def ValParser[T: Read, X] = new TParser[Val[T], X]{
-    type Out = (T, X)
+    type Out = (X, T)
 
-    def apply(f: Val[T])(cont: X): StateT[Option, String, (T, X)] =
+    def apply(f: Val[T])(cont: X): StateT[Option, String, (X, T)] =
       StateT{ Read[T].read(_).map{
-        case (tail, t) => (tail, (t, cont))
+        case (tail, t) => (tail, (cont, t))
       }}
   }
 
   implicit def CmpParser[F1 <: Fmt, O1, F2 <: Fmt, O2, X](implicit
-      P2: TParser.Aux[F2, X, O2],
-      P1: TParser.Aux[F1, O2, O1]) = new TParser[Cmp[F1, F2], X]{
-    type Out = O1
+      P1: TParser.Aux[F1, X, O1],
+      P2: TParser.Aux[F2, O1, O2]) = new TParser[Cmp[F1, F2], X]{
+    type Out = O2
 
     def apply(f: Cmp[F1, F2])(cont: X): StateT[Option, String, Out] =
-      P2(f.f2)(cont) flatMap P1(f.f1)
+      P1(f.f1)(cont) flatMap P2(f.f2)
   }
 
   object Syntax{
@@ -231,25 +233,72 @@ class TParserSpec extends FunSpec with Matchers{
   import TParser.Syntax._
 
   sscanf(Lit("hola")).run("hola") shouldBe Some(("", ()))
-  sscanf(Lit("mundo!")).run("hola, mundo!") shouldBe Some(("hola, ", ()))
-  sscanf(Val[Int]).run("hola2345") shouldBe Some(("hola", (2345, ())))
-
-  val r = """^(\d+)(.*)""".r
-  val r("2345", "hola") = "2345hola"//  shouldBe Some((2345, "hola"))
-  sscanf(Cmp(Val[Int], Lit("hola"))).run("2345hola") shouldBe Some(("", (2345, ())))
-
+  sscanf(Lit("hola")).run("hola, mundo!") shouldBe Some((", mundo!", ()))
+  sscanf(Val[Int]).run("2345hola") shouldBe Some(("hola", ((), 2345)))
+  sscanf(Cmp(Val[Int], Lit("hola"))).run("2345hola") shouldBe Some(("", ((), 2345)))
 }
 
+object F_TPrinter{
 
+  trait TPrinter2[F <: Fmt, X]{
+    type P[_]
 
+    def apply(fmt: F)(cont: String => X): P[X]
+  }
 
+  object TPrinter2{
 
+    type Aux[F <: Fmt, X, _P[_]] = TPrinter2[F, X]{ type P[x] = _P[x] }
 
+    implicit def LitTPrinter2[X] = new TPrinter2[Lit, X]{
+      type P[T] = T
 
+      def apply(fmt: Lit)(cont: String => X): X =
+        cont(fmt.s)
+    }
 
+    implicit def ValTPrinter2[A: Read: Show, X] = new TPrinter2[Val[A], X]{
+      type P[T] = A => T
 
+      def apply(fmt: Val[A])(cont: String => X): A => X =
+        cont compose Show[A].write
+    }
 
+    implicit def CmpTPrinter2[F1 <: Fmt, P1[_], F2 <: Fmt, P2[_], X](implicit
+        P2: TPrinter2[F2, X]{ type P[T] = P2[T] },
+        P1: TPrinter2[F1, P2[X]]{ type P[T] = P1[T] }) =
+      new TPrinter2[Cmp[F1, F2], X]{
+        type P[T] = P1[P2[T]]
 
+        def apply(fmt: Cmp[F1, F2])(cont: String => X): P1[P2[X]] =
+          P1(fmt.f1){ s1 =>
+            P2(fmt.f2){ s2 =>
+              cont(s1 ++ s2): X
+            }: P2[X]
+          }: P1[P2[X]]
 
+      }
 
+    object Syntax{
 
+      def sprintf[F <: Fmt](f: F)(implicit
+          TP: TPrinter2[F, String]): TP.P[String] =
+        TP(f)(identity)
+
+      // implicit class FmtOps[F <: Fmt, _Out](f: F)(implicit
+      //     P: TPrinter2[F, String]{ type Out = _Out }){
+      //   val printf: _Out =
+      //     P(f)(identity)
+      // }
+    }
+  }
+  class F_TPrinter2Spec extends FunSpec with Matchers{
+    // import F_TPrinter2._
+    import TPrinter2.Syntax._
+
+    sprintf(Lit("hola")) shouldBe "hola"
+    sprintf(Val[Int]).apply(1) shouldBe "1"
+    sprintf(Cmp(Lit("hola, "), Cmp(Lit("number "), Val[Int]))).apply(1) shouldBe
+      "hola, number 1"
+  }
+}
