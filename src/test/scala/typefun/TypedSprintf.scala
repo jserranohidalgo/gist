@@ -8,7 +8,7 @@ import scala.util.Try
 // SECTION 4.1 TYPED SPRINTF
 
 trait Read[T]{
-  def read(str: String): Option[(T, String)]
+  def read(str: String): Option[(String, T)]
 }
 
 object Read{
@@ -16,21 +16,20 @@ object Read{
   def apply[A](implicit R: Read[A]): Read[A] = R
 
   implicit val IntRead = new Read[Int]{
-    val IntPrefix = """(\d+)(.*)""".r
+    val IntPrefix = """(.*?)(\d+)$""".r
 
-    def read(str: String): Option[(Int, String)] = str match {
-      case IntPrefix(i, tail) => Some((Integer.parseInt(i), tail))
+    def read(str: String): Option[(String, Int)] = str match {
+      case IntPrefix(tail, i) => Some((tail, Integer.parseInt(i)))
       case _ => None
     }
   }
 
-  implicit val StrRead = new Read[String]{
-    def StrPrefix(prefix: String) = """${prefix}(.*)""".r
+  implicit def StrRead(prefix: String) = new Read[String]{
+    val StrPrefix = (s"""(.*)${prefix}$$""").r
 
     def read(str: String): Option[(String, String)] = {
-      val R = StrPrefix(str)
       str match {
-        case R(tail) => Some((str, tail))
+        case StrPrefix(tail) => Some((tail, str))
         case _ => None
       }
     }
@@ -181,49 +180,65 @@ class TPrinterSpec extends FunSpec with Matchers{
     "hola, number 1"
 }
 
+import scalaz.StateT, scalaz.std.option._
+
 trait TParser[F <: Fmt, X]{
   type Out
 
-  def apply(f: F)(cont: X): String => Option[(Out, X)]
+  def apply(f: F)(cont: X): StateT[Option, String, Out]
 }
 
 object TParser{
 
   type Aux[F <: Fmt, X, _Out] = TParser[F, X]{ type Out = _Out }
 
-  def LitParser[X] = new TParser[Lit, X]{
-    type Out = Unit
+  implicit def LitParser[X] = new TParser[Lit, X]{
+    type Out = X
 
-    def apply(f: Lit)(cont: X): String => Option[(Unit, X)] =
-      Read[String].read(_).map{
-        case (_, _) => ((), cont)
-      }
+    def apply(f: Lit)(cont: X): StateT[Option, String, X] =
+      StateT{ Read.StrRead(f.s).read(_).map{
+        case (tail, _) => (tail, cont)
+      }}
   }
 
-  def ValParser[T: Read, X] = new TParser[Val[T], X]{
-    type Out = T
+  implicit def ValParser[T: Read, X] = new TParser[Val[T], X]{
+    type Out = (T, X)
 
-    def apply(f: Val[T])(cont: X): String => Option[(T, X)] =
-      Read[T].read(_).map{
-        case (t, tail) => (t, cont)
-      }
+    def apply(f: Val[T])(cont: X): StateT[Option, String, (T, X)] =
+      StateT{ Read[T].read(_).map{
+        case (tail, t) => (tail, (t, cont))
+      }}
   }
 
-  def CmpParser[F1 <: Fmt, O1, F2 <: Fmt, O2, X](implicit
-      P1: TParser.Aux[F1, O2, O1],
-      P2: TParser.Aux[F2, X, O2]) = new TParser[Cmp[F1, F2], X]{
+  implicit def CmpParser[F1 <: Fmt, O1, F2 <: Fmt, O2, X](implicit
+      P2: TParser.Aux[F2, X, O2],
+      P1: TParser.Aux[F1, O2, O1]) = new TParser[Cmp[F1, F2], X]{
     type Out = O1
 
-    def apply(f: Cmp[F1, F2])(cont: X): String => Option[(O1, X)] =
-      s => {
-        val P1(f._f1){ s1 =>
-        P2(f._f2){ s2 =>
-          cont(s1+s2)
-        }
-      }(s)
+    def apply(f: Cmp[F1, F2])(cont: X): StateT[Option, String, Out] =
+      P2(f.f2)(cont) flatMap P1(f.f1)
+  }
+
+  object Syntax{
+
+    def sscanf[F <: Fmt](f: F)(implicit P: TParser[F, Unit]): StateT[Option, String, P.Out] =
+      P(f)(())
   }
 }
 
+class TParserSpec extends FunSpec with Matchers{
+
+  import TParser.Syntax._
+
+  sscanf(Lit("hola")).run("hola") shouldBe Some(("", ()))
+  sscanf(Lit("mundo!")).run("hola, mundo!") shouldBe Some(("hola, ", ()))
+  sscanf(Val[Int]).run("hola2345") shouldBe Some(("hola", (2345, ())))
+
+  val r = """^(\d+)(.*)""".r
+  val r("2345", "hola") = "2345hola"//  shouldBe Some((2345, "hola"))
+  sscanf(Cmp(Val[Int], Lit("hola"))).run("2345hola") shouldBe Some(("", (2345, ())))
+
+}
 
 
 
