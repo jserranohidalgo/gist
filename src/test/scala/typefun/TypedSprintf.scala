@@ -264,18 +264,18 @@ object F_TPrinter{
         cont compose Show[A].write
     }
 
-    implicit def CmpTPrinter2[F1 <: Fmt, P1[_], F2 <: Fmt, P2[_], X](implicit
-        P2: TPrinter2[F2, X]{ type P[T] = P2[T] },
-        P1: TPrinter2[F1, P2[X]]{ type P[T] = P1[T] }) =
+    implicit def CmpTPrinter2[F1 <: Fmt, F2 <: Fmt, P2[_], X](implicit
+        P2: TPrinter2.Aux[F2, X, P2],
+        P1: TPrinter2[F1, P2[X]]) =
       new TPrinter2[Cmp[F1, F2], X]{
-        type P[T] = P1[P2[T]]
+        type P[T] = P1.P[P2[T]]
 
-        def apply(fmt: Cmp[F1, F2])(cont: String => X): P1[P2[X]] =
+        def apply(fmt: Cmp[F1, F2])(cont: String => X): P1.P[P2[X]] =
           P1(fmt.f1){ s1 =>
             P2(fmt.f2){ s2 =>
               cont(s1 ++ s2): X
             }: P2[X]
-          }: P1[P2[X]]
+          }: P1.P[P2[X]]
 
       }
 
