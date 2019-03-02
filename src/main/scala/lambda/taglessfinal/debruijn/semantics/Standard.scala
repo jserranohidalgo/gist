@@ -9,13 +9,13 @@ object Standard extends Lambda[Function1]{
   def int[E](i: Int): E => Int =
     _ => i
 
-  def add[E](i1: E => Int)(i2: E => Int): E => Int =
+  def add[E](i1: E => Int, i2: E => Int): E => Int =
     e => i1(e) + i2(e)
 
   def vz[E, T]: ((T, E)) => T =
     _._1
 
-  def vs[E, T1, T](a: E => T): ((T1, E)) => T =
+  def vs[E, T, T1](a: E => T): ((T1, E)) => T =
     t1E => a(t1E._2)
 
   def lam[E, T1, T2](t: ((T1, E)) => T2): E => T1 => T2 =
