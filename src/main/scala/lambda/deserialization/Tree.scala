@@ -50,7 +50,15 @@ object Tree{
       }
   }
 
-
+  object App{
+    def unapply(t: Tree): Option[(Tree, Tree)] =
+      t match {
+        case Node("App", List(ft, at)) =>
+          Some((ft, at))
+        case _ =>
+          None
+      }
+  }
 
   trait Syntax{
 

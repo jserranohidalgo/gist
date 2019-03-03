@@ -6,42 +6,15 @@ import taglessfinal.debruijn._
 
 object Typecheck{
 
-  abstract class Typ{
-    type A
-    val typ: TQ[A]
-  }
-
-  object Typ{
-    def apply[_A](t: TQ[_A]) = new Typ{
-      type A = _A
-      val typ = t
-    }
-  }
-
-  def read_t2(t: Tree): Either[String, Typ] = t match {
+  def read_t(t: Tree): Either[String, Typ] = t match {
     case Node("TInt", List()) =>
       Right(Typ(tint[TQ]))
     case Node("TArr", List(t1, t2)) =>
-      read_t2(t1).right.flatMap{ t1t =>
-        read_t2(t2).right.map[Typ]{ t2t =>
+      read_t(t1).right.flatMap{ t1t =>
+        read_t(t2).right.map[Typ]{ t2t =>
           Typ(t1t.typ -> t2t.typ)
         }
       }
-    // for{
-    //   t1t <- read_t2(t1).right
-    //   t2t <- read_t2(t2).right
-    // } yield Typ[t1t.A => t2t.A](t1t.typ -> t2t.typ)
-    case _ =>
-      Left(s"Not a type: $t")
-  }
-
-  def read_t(t: Tree): Either[String, TQ[_]] = t match {
-    case Node("TInt", List()) =>
-      Right(tint[TQ])
-    case Node("TArr", List(t1, t2)) => for{
-      t1 <- read_t(t1).right
-      t2 <- read_t(t2).right
-    } yield (t1 -> t2)
     case _ =>
       Left(s"Not a type: $t")
   }
@@ -71,15 +44,23 @@ object Typecheck{
       G.findVar(name, gamma)
 
     case Tree.Lam(name, typ, body) =>
-      read_t2(typ).right.flatMap{ ty1 =>
+      read_t(typ).right.flatMap{ ty1 =>
         apply(body, (Gamma.VarDesc(name, ty1.typ), gamma)).right.map[DynTerm[P, E]]{ db =>
           DynTerm(ty1.typ -> db.typ, L.lam(db.term))
         }
       }
-    //   ty1 <- read_t2(typ).right
+    //   ty1 <- read_t(typ).right
     //   db <- apply(body, (Gamma.VarDesc(name, ty1.typ), gamma)).right
     // } yield DynTerm(ty1.typ -> db.typ, L.lam(db.term))
 
+    case Tree.App(ft, at) =>
+      apply(ft, gamma).right.flatMap{ df =>
+        df.typ[AsArrow].apply(df.term).toEither(s"Not a lambda: ${df.typ}").right.flatMap{ _df =>
+          apply(at, gamma).right.map{ da =>
+            DynTerm(???, ???)
+          }
+        }
+      }
 
     case _ =>
       Left(s"Typecheck error: $tree")
