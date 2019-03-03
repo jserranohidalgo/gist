@@ -8,6 +8,8 @@ trait TQ[T]{
 
 object TQ{
 
+  type Typ = TQ[_]
+
   implicit val TQTSYM = new TSYM[TQ]{
     def tint: TQ[Int] = new TQ[Int]{
       def apply[P[_]](implicit T: TSYM[P]): P[Int] =
