@@ -9,6 +9,8 @@ trait TSYM[P[_]]{
 
 object TSYM{
 
+  def apply[P[_]](implicit T: TSYM[P]) = T
+
   trait Syntax{
     def tint[P[_]](implicit T: TSYM[P]): P[Int] =
       T.tint

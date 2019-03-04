@@ -17,6 +17,7 @@ object Lambda{
 
   implicit val ShowSem: Lambda[ShowB] = semantics.ShowSem
   implicit val StdSem: Lambda[Function1] = semantics.Standard
+  implicit val TermSem: Lambda[semantics.Term] = semantics.Term.TermLambda
 
   trait Syntax{
 

@@ -44,23 +44,20 @@ object Typecheck{
       G.findVar(name, gamma)
 
     case Tree.Lam(name, typ, body) =>
-      read_t(typ).right.flatMap{ ty1 =>
-        apply(body, (Gamma.VarDesc(name, ty1.typ), gamma)).right.map[DynTerm[P, E]]{ db =>
-          DynTerm(ty1.typ -> db.typ, L.lam(db.term))
-        }
-      }
-    //   ty1 <- read_t(typ).right
-    //   db <- apply(body, (Gamma.VarDesc(name, ty1.typ), gamma)).right
-    // } yield DynTerm(ty1.typ -> db.typ, L.lam(db.term))
+      read_t(typ).right.flatMap{ ty1: Typ =>
+      apply(body, (Gamma.VarDesc(name, ty1.typ), gamma)).right.map[DynTerm[P, E]]{ db =>
+      DynTerm(ty1.typ -> db.typ, L.lam(db.term))
+      }}
 
     case Tree.App(ft, at) =>
-      apply(ft, gamma).right.flatMap{ df =>
-        df.typ[AsArrow].apply(df.term).toEither(s"Not a lambda: ${df.typ}").right.flatMap{ _df =>
-          apply(at, gamma).right.map{ da =>
-            DynTerm(???, ???)
-          }
-        }
-      }
+      apply(ft, gamma).right.flatMap{ df => {
+      val asArrow = df.typ[AsArrow]
+      asArrow.eq.toEither(s"Not a lambda: ${df.typ}").right.flatMap{ case (tqT1, tqT2, eq) =>
+      asArrow(df.term).toEither(s"Should not happen").right.flatMap{ _df =>
+      apply(at, gamma).right.flatMap{ da => {
+      SafeCast(da.typ[SafeCast])(tqT1, da.term).toEither(s"Not argument: ${da.typ}").right.map{ _da =>
+      DynTerm(tqT2, L.app(_df)(_da))
+      }}}}}}}
 
     case _ =>
       Left(s"Typecheck error: $tree")
