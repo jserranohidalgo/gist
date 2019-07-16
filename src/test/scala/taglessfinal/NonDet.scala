@@ -2,6 +2,9 @@ package org.hablapps.gist
 package nondet
 package adhoc
 
+// http://okmij.org/ftp/tagless-final/nondet-paper.pdf
+// http://okmij.org/ftp/tagless-final/nondet-effect.html
+
 abstract class NonDet[Repr[_]]{
   def fail[A]: Repr[A]
   def choice[A](a: Repr[A], b: Repr[A]): Repr[A]
