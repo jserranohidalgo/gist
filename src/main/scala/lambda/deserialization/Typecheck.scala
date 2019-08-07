@@ -56,7 +56,7 @@ object Typecheck{
       asArrow(df.term).toEither(s"Should not happen").right.flatMap{ _df =>
       apply(at, gamma).right.flatMap{ da => {
       SafeCast(da.typ[SafeCast])(tqT1, da.term).toEither(s"Not argument: ${da.typ}").right.map{ _da =>
-      DynTerm(tqT2, L.app(_df)(_da))
+      DynTerm(tqT2, L.app(_df, _da))
       }}}}}}}
 
     case _ =>

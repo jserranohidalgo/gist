@@ -21,6 +21,6 @@ object Standard extends Lambda[Function1]{
   def lam[E, T1, T2](t: ((T1, E)) => T2): E => T1 => T2 =
     e => t1 => t((t1, e))
 
-  def app[E, T1, T2](f: E => T1 => T2)(t1: E => T1): E => T2 =
+  def app[E, T1, T2](f: E => T1 => T2, t1: E => T1): E => T2 =
     e => (f(e))(t1(e))
 }

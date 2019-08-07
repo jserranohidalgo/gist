@@ -37,9 +37,9 @@ object Term{
         L.lam(t(L))
     }
 
-    def app[E, T1, T2](f: Term[E, T1 => T2])(t1: Term[E, T1]) = new Term[E, T2]{
+    def app[E, T1, T2](f: Term[E, T1 => T2], t1: Term[E, T1]) = new Term[E, T2]{
       def apply[P[_, _]](implicit L: Lambda[P]): P[E, T2] =
-        L.app(f(L))(t1(L))
+        L.app(f(L), t1(L))
     }
   }
 }

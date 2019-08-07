@@ -23,8 +23,8 @@ object ShowSem extends Lambda[ShowB]{
     i => a(i-1)
 
   def lam[E, T1, T2](t: Int => String): Int => String =
-    i => s"(λx$i.${t(i+1)})"
+    i => s"λx$i.(${t(i+1)})"
 
-  def app[E, T1, T2](f: Int => String)(t1: Int => String): Int => String =
-    i => "(" + f(i) + " " + t1(i) + ")"
+  def app[E, T1, T2](f: Int => String, t1: Int => String): Int => String =
+    i => f(i) + t1(i)
 }

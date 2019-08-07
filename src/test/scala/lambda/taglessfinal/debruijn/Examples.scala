@@ -5,11 +5,36 @@ package debruijn
 
 case class Examples[P[_, _]](implicit L: Lambda[P]){
 
+  val `λx0.(x0)`: P[Unit, Int => Int] =
+    L.lam(L.vz)
+
+  val `y1`: P[(Int, Unit), Int] =
+    L.vz
+
+  val `λx0.(λx1.((x0+(x1+1)))x0)`: P[Unit, Int => Int] =
+    L.lam(
+      L.app(
+        L.lam(
+          L.add(
+            L.vs(L.vz): P[(Int, (Int, Unit)), Int],
+            L.add(
+              L.vz: P[(Int, (Int, Unit)), Int],
+              L.int(1)))),
+        L.vz))
+
+  val `λx0.((x0+(x0+1)))`: P[Unit, Int => Int] =
+    L.lam(
+      L.add(
+        L.vz: P[(Int, Unit), Int],
+        L.add(
+          L.vz: P[(Int, Unit), Int],
+          L.int(1))))
+
   // tr_lam("x0", tr_tArr(tr_tInt, tr_tInt), tr_app(tr_vr("x0"), tr_int(1)))
-  def ex: P[Unit, (Int => Int) => Int] = L.lam(L.app(L.vz[Unit, Int => Int])(L.int(1)))
+  def ex: P[Unit, (Int => Int) => Int] = L.lam(L.app(L.vz[Unit, Int => Int], L.int(1)))
 
   def ex1: P[(Int => Int, (Int, Unit)), Int] =
-    L.app(L.vz[(Int, Unit), Int => Int])(L.vs(L.vz))
+    L.app(L.vz[(Int, Unit), Int => Int], L.vs(L.vz))
 
   // import L._
 

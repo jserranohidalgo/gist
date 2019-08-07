@@ -15,7 +15,7 @@ class TermSpec extends FunSpec with Matchers{
   ex: Term[Unit, (Int => Int) => Int]
 
   it("Show interpretation"){
-    ex[ShowB].apply(0) shouldBe "(λx0.(x0 1))"
+    ex[ShowB].apply(0) shouldBe "λx0.(x01)"
   }
 
   it("Eval interpretation"){
