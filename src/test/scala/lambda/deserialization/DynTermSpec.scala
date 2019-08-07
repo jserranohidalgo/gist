@@ -4,6 +4,7 @@ package deserialization
 
 import taglessfinal.debruijn._
 import org.scalatest._
+import Lambda.Syntax._
 
 class DynTermSpec extends Matchers{
 

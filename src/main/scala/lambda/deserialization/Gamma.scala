@@ -26,10 +26,10 @@ object Gamma{
           gamma: (VarDesc[T], Γ)): Either[String, DynTerm[P, (T, E)]] =
         gamma match {
           case (VarDesc(name, typ), _) =>
-            Right(DynTerm(typ, vz[P, E, T]))
+            Right(DynTerm(typ, Lambda[P].vz[E, T]))
           case (_, tail) => for {
             dt <- G.findVar(name, tail).right
-          } yield DynTerm(dt.typ, vs(dt.term))
+          } yield DynTerm(dt.typ, Lambda[P].vs(dt.term))
         }
     }
 }
