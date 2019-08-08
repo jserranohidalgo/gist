@@ -18,7 +18,6 @@ object Lambda{
   implicit val ShowSem: Lambda[ShowB] = semantics.ShowSem
   implicit val StdSem: Lambda[Function1] = semantics.Standard
   implicit val TermSem: Lambda[semantics.Term] = semantics.Term.TermLambda
-  implicit def PE[Repr[_, _]: Lambda]: debruijn.Lambda[partialeval.PartialEval[Repr, ?, ?]] = ???
 
   trait Syntax{
 
