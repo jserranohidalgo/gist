@@ -23,11 +23,14 @@ object NonDet{
 abstract class Lists[Repr[_]]{
   def nil[A]: Repr[List[A]]
   def cons[A](head: Repr[A], tail: Repr[List[A]]): Repr[List[A]]
-  def `match`[A, B](l: Repr[List[A]])(
-    nil: Repr[B], cons: (Repr[A], Repr[List[A]]) => Repr[B]): Repr[B]
-  def foldr[A, B](nil: Repr[B], cons: (Repr[A], Repr[B]) => Repr[B])(
-    l: Repr[List[A]]): Repr[B]
   def list[A](l: List[A]): Repr[List[A]]
+  def recur[A, B](nil: Repr[B],
+    cons: (Repr[A], Repr[List[A]]) => Repr[B] => Repr[B])(
+    l: Repr[List[A]]): Repr[B]
+
+  def foldr[A, B](nil: Repr[B], cons: (Repr[A], Repr[B]) => Repr[B])(
+    l: Repr[List[A]]): Repr[B] =
+    recur[A, B](nil, (h, _) => st => cons(h, st))(l)
 }
 
 object Lists{
@@ -44,19 +47,14 @@ object Lists{
     def cons[A](head: List[A], tail: List[List[A]]): List[List[A]] =
       combine(head, tail)(_ :: _)
 
-    def `match`[A, B](l: List[List[A]])(
-        nil: List[B], cons: (List[A], List[List[A]]) => List[B]): List[B] =
-      l.foldLeft(Nil: List[B])((acc, la) =>
-        la match {
-          case Nil => nil ++ acc
-          case head :: tail => cons(List(head), List(tail)) ++ acc
-        })
-
-    def foldr[A, B](nil: List[B], cons: (List[A], List[B]) => List[B])(
+    def recur[A, B](nil: List[B], cons: (List[A], List[List[A]]) => List[B] => List[B])(
         l: List[List[A]]): List[B] =
       l.foldLeft(Nil: List[B])((acc, la) =>
-        la.foldRight(nil)((a, lb) =>
-          cons(List(a), lb)))
+        la.foldRight((List[A](), nil)){
+          case (head, (tail, lb)) =>
+            (head::tail, cons(List(head), List(tail))(lb))
+        }._2 ++ acc
+      )
 
     def list[A](l: List[A]): List[List[A]] =
       List(l)
@@ -68,7 +66,7 @@ abstract class Base[Repr[_]]{
 }
 
 object Base{
-  implicit val _LIst = new Base[List]{
+  implicit val _List = new Base[List]{
     def int(i: Int): List[Int] = List(i)
   }
 }
@@ -79,11 +77,12 @@ case class Perm[Repr[_]](implicit
   val B: Base[Repr]){
 
   def insert[A](a: Repr[A], l: Repr[List[A]]): Repr[List[A]] =
-    ND.choice[List[A]](
-      L.cons(a, l),
-      L.`match`[A, List[A]](l)(
-        ND.fail[List[A]],
-        (head, tail) => L.cons(head, insert(a, tail))))
+    L.recur[A, List[A]](
+      L.cons(a, L.nil),
+      (head, tail) => tailsol =>
+        ND.choice(
+          L.cons(a, L.cons(head, tail)),
+          L.cons(head, tailsol)))(l)
 
   def perm[A](l: Repr[List[A]]): Repr[List[A]] =
     L.foldr(L.nil[A], insert[A])(l)
@@ -105,7 +104,7 @@ class NonDetSpec extends FunSpec with Matchers{
       val test: List[List[Int]] =
         P.perm(P.L.cons(P.B.int(1), P.L.cons(P.B.int(2), P.L.cons(P.B.int(3), P.L.nil))))
 
-      test shouldBe List(
+      test.toSet shouldBe Set(
         List(1, 3, 2),
         List(1, 2, 3),
         List(3, 2, 1),
@@ -115,7 +114,7 @@ class NonDetSpec extends FunSpec with Matchers{
     }
 
     it("works 2"){
-      P.perm(List(1,2,3)) shouldBe List(
+      P.perm(List(1,2,3)).toSet shouldBe Set(
         List(1, 3, 2),
         List(1, 2, 3),
         List(3, 2, 1),
