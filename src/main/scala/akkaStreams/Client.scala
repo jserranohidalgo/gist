@@ -30,7 +30,7 @@ object Client extends App{
         .concat(Source.single("BYE"))
         .map(elem => ByteString(s"$elem\n")))
 
-  val connected = connection.run()
+  //val connected = connection.run()
 
 
   //connected.onComplete(_ => system.terminate)
