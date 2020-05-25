@@ -7,14 +7,14 @@ package monadic
 import cats.Id
 
 abstract class NonDet[Repr[_]]{
+  type NonDet[_]
+
   def pure[A](a: Repr[A]): Repr[List[A]]
   def map[A, B](c: Repr[List[A]])(f: Repr[A] => Repr[B]): Repr[List[B]]
   def bind[A, B](c: Repr[List[A]])(f: Repr[A] => Repr[List[B]]): Repr[List[B]]
 
   def fail[A]: Repr[List[A]]
   def choice[A](a: Repr[List[A]], b: Repr[List[A]]): Repr[List[A]]
-
-  def run[A](r: Repr[List[A]]): List[A]
 }
 
 object NonDet{
@@ -24,7 +24,6 @@ object NonDet{
     def bind[A, B](c: List[A])(f: A => List[B]): List[B] = c.flatMap(f)
     def fail[A]: List[A] = List()
     def choice[A](a: List[A], b: List[A]) = a ++ b
-    def run[A](r: List[A]) = r
   }
 }
 

@@ -10,15 +10,12 @@ package direct
 abstract class NonDet[Repr[_]]{
   def fail[A]: Repr[A]
   def choice[A](a: Repr[A], b: Repr[A]): Repr[A]
-
-  def run[A](r: Repr[A]): List[A]
 }
 
 object NonDet{
   implicit val _List = new NonDet[List]{
     def fail[A] = List()
     def choice[A](a: List[A], b: List[A]) = a ++ b
-    def run[A](r: List[A]) = r
   }
 }
 
@@ -105,10 +102,6 @@ case class Perm[Repr[_]](implicit
 
   def perm[A](l: Repr[List[A]]): Repr[List[A]] =
     L.foldr(L.nil[A], insert2[A])(l)
-
-  def perm[A](l: List[A]): List[List[A]] =
-    ND.run(perm(L.list(l)))
-
 }
 
 import org.scalatest._
@@ -133,7 +126,7 @@ class NonDetSpec extends FunSpec with Matchers{
     }
 
     it("works 2"){
-      P.perm(List(1,2,3)).toSet shouldBe Set(
+      P.perm(P.L.list(List(1,2,3))).toSet shouldBe Set(
         List(1, 3, 2),
         List(1, 2, 3),
         List(3, 2, 1),
