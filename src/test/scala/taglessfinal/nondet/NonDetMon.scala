@@ -1,6 +1,8 @@
 package org.hablapps.gist
 package nondet
-package denotational
+package monadic
+
+// monadic, non-direct style
 
 import cats.Id
 

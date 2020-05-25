@@ -1,9 +1,11 @@
 package org.hablapps.gist
 package nondet
-package adhoc
+package direct
 
 // http://okmij.org/ftp/tagless-final/nondet-paper.pdf
 // http://okmij.org/ftp/tagless-final/nondet-effect.html
+
+// Direct style
 
 abstract class NonDet[Repr[_]]{
   def fail[A]: Repr[A]
