@@ -6,19 +6,24 @@ package monadic
 
 import cats.Id
 
-abstract class NonDet[Repr[_]]{
+abstract class NonDetetermism[Repr[_]]{
+  // alternative, tagged types: type NonDet[x] = List[x]@@ND
   type NonDet[_]
 
-  def pure[A](a: Repr[A]): Repr[List[A]]
-  def map[A, B](c: Repr[List[A]])(f: Repr[A] => Repr[B]): Repr[List[B]]
-  def bind[A, B](c: Repr[List[A]])(f: Repr[A] => Repr[List[B]]): Repr[List[B]]
+  def pure[A](a: Repr[A]): Repr[NonDet[A]]
+  def map[A, B](c: Repr[NonDet[A]])(f: Repr[A] => Repr[B]): Repr[NonDet[B]]
+  def bind[A, B](c: Repr[NonDet[A]])(f: Repr[A] => Repr[NonDet[B]]): Repr[NonDet[B]]
 
-  def fail[A]: Repr[List[A]]
-  def choice[A](a: Repr[List[A]], b: Repr[List[A]]): Repr[List[A]]
+  def fail[A]: Repr[NonDet[A]]
+  def choice[A](a: Repr[NonDet[A]], b: Repr[NonDet[A]]): Repr[NonDet[A]]
 }
 
-object NonDet{
-  implicit val _Id = new NonDet[Id]{
+object NonDetetermism{
+  type Aux[Repr[_], ND[_]] = NonDetetermism[Repr]{ type NonDet[x] = ND[x] }
+
+  implicit val _Id: Aux[Id, List] = new NonDetetermism[Id]{
+    type NonDet[x] = List[x]
+
     def pure[A](a: A) = List(a)
     def map[A, B](c: List[A])(f: A => B) = c.map(f)
     def bind[A, B](c: List[A])(f: A => List[B]): List[B] = c.flatMap(f)
@@ -38,7 +43,7 @@ abstract class Lists[Repr[_]]{
   def foldr[A, B](nil: Repr[B], cons: (Repr[A], Repr[B]) => Repr[B])(
     l: Repr[List[A]]): Repr[B] =
     recur[A, B](nil, (h, _) => st => cons(h, st))(l)
-    // TBD: delayed argument to avoid recursion
+  // TBD: delayed argument to avoid recursion
   def `match`[A, B](l: Repr[List[A]])(
     nil: Repr[B], cons: (Repr[A], Repr[List[A]]) => Repr[B]): Repr[B] =
     recur[A, B](nil, (head, tail) => _ => cons(head, tail))(l)
@@ -68,12 +73,14 @@ object Base{
   }
 }
 
-case class Perm[Repr[_]](implicit
-  val ND: NonDet[Repr],
+case class Perm[Repr[_], ND[_]](implicit
+  val ND: NonDetetermism.Aux[Repr, ND],
   val L: Lists[Repr],
   val B: Base[Repr]){
 
-  def insert[A](a: Repr[A], r: Repr[List[List[A]]]): Repr[List[List[A]]] =
+  import ND.NonDet
+
+  def insert[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
     ND.bind(r){ l =>
       ND.choice(
         ND.pure(L.cons(a, l)),
@@ -84,7 +91,7 @@ case class Perm[Repr[_]](implicit
       )
     }
 
-  def insert2[A](a: Repr[A], r: Repr[List[List[A]]]): Repr[List[List[A]]] =
+  def insert2[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
     ND.bind(r){ l =>
       L.`match`(l)(
         ND.pure(L.cons(a, L.nil)),
@@ -96,9 +103,9 @@ case class Perm[Repr[_]](implicit
       )
     }
 
-  def insert3[A](a: Repr[A], r: Repr[List[List[A]]]): Repr[List[List[A]]] =
+  def insert3[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
     ND.bind(r)(
-      L.recur[A, List[List[A]]]
+      L.recur[A, NonDet[List[A]]]
         (ND.pure(L.cons(a, L.nil)),
         (head, tail) => tailsol =>
           ND.choice(
@@ -107,8 +114,8 @@ case class Perm[Repr[_]](implicit
           )
       ))
 
-  def perm[A](l: Repr[List[A]]): Repr[List[List[A]]] =
-    L.foldr[A, List[List[A]]](ND.pure(L.nil[A]), insert3[A])(l)
+  def perm[A](l: Repr[List[A]]): Repr[NonDet[List[A]]] =
+    L.foldr[A, NonDet[List[A]]](ND.pure(L.nil[A]), insert3[A])(l)
 }
 
 import org.scalatest._
@@ -117,7 +124,7 @@ class NonDetSpec extends FunSpec with Matchers{
 
   describe("NonDeterminism through tagless final without monads"){
 
-    val P = Perm[Id]
+    val P = Perm[Id, List]
 
     it("works 1"){
       val test: List[List[Int]] =
