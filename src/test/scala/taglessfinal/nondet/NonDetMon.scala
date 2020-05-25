@@ -6,13 +6,31 @@ package monadic
 
 import cats.Id
 
+abstract class MonadTF[Repr[_]]{
+  type Effect[_]
+
+  def pure[A](a: Repr[A]): Repr[Effect[A]]
+  def bind[A, B](c: Repr[Effect[A]])(f: Repr[A] => Repr[Effect[B]]): Repr[Effect[B]]
+
+  def map[A, B](c: Repr[Effect[A]])(f: Repr[A] => Repr[B]): Repr[Effect[B]] =
+    bind(c)(f andThen pure[B])
+}
+
+object MonadTF{
+  type Aux[Repr[_], E[_]] = MonadTF[Repr]{ type Effect[x] = E[x] }
+
+  implicit val _IdMonadTF: Aux[Id, List] = new MonadTF[Id]{
+    type Effect[x] = List[x]
+
+    def pure[A](a: A) = List(a)
+    def bind[A, B](c: List[A])(f: A => List[B]): List[B] = c.flatMap(f)
+  }
+}
+
+
 abstract class NonDetetermism[Repr[_]]{
   // alternative, tagged types: type NonDet[x] = List[x]@@ND
   type NonDet[_]
-
-  def pure[A](a: Repr[A]): Repr[NonDet[A]]
-  def map[A, B](c: Repr[NonDet[A]])(f: Repr[A] => Repr[B]): Repr[NonDet[B]]
-  def bind[A, B](c: Repr[NonDet[A]])(f: Repr[A] => Repr[NonDet[B]]): Repr[NonDet[B]]
 
   def fail[A]: Repr[NonDet[A]]
   def choice[A](a: Repr[NonDet[A]], b: Repr[NonDet[A]]): Repr[NonDet[A]]
@@ -24,9 +42,6 @@ object NonDetetermism{
   implicit val _Id: Aux[Id, List] = new NonDetetermism[Id]{
     type NonDet[x] = List[x]
 
-    def pure[A](a: A) = List(a)
-    def map[A, B](c: List[A])(f: A => B) = c.map(f)
-    def bind[A, B](c: List[A])(f: A => List[B]): List[B] = c.flatMap(f)
     def fail[A]: List[A] = List()
     def choice[A](a: List[A], b: List[A]) = a ++ b
   }
@@ -56,9 +71,9 @@ object Lists{
     def cons[A](head: A, tail: List[A]): List[A] = head :: tail
     def recur[A, B](nil: B, cons: (A, List[A]) => B => B)(l: List[A]): B =
       l.foldRight((List[A](), nil)){
-          case (head, (tail, lb)) =>
-            (head::tail, cons(head, tail)(lb))
-        }._2
+        case (head, (tail, lb)) =>
+          (head::tail, cons(head, tail)(lb))
+      }._2
     def list[A](l: List[A]): List[A] = l
   }
 }
@@ -74,6 +89,7 @@ object Base{
 }
 
 case class Perm[Repr[_], ND[_]](implicit
+  val M: MonadTF.Aux[Repr, ND],
   val ND: NonDetetermism.Aux[Repr, ND],
   val L: Lists[Repr],
   val B: Base[Repr]){
@@ -81,41 +97,41 @@ case class Perm[Repr[_], ND[_]](implicit
   import ND.NonDet
 
   def insert[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
-    ND.bind(r){ l =>
+    M.bind(r){ l =>
       ND.choice(
-        ND.pure(L.cons(a, l)),
+        M.pure(L.cons(a, l)),
         L.`match`(l)(
           ND.fail[List[A]],
-          (head, tail) => ND.map(insert(a, ND.pure(tail)))(L.cons[A](head,_))
+          (head, tail) => M.map(insert(a, M.pure(tail)))(L.cons[A](head,_))
         )
       )
     }
 
   def insert2[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
-    ND.bind(r){ l =>
+    M.bind(r){ l =>
       L.`match`(l)(
-        ND.pure(L.cons(a, L.nil)),
+        M.pure(L.cons(a, L.nil)),
         (head, tail) =>
           ND.choice(
-            ND.pure(L.cons(a, L.cons(head, tail))),
-            ND.map(insert2(a, ND.pure(tail)))(L.cons[A](head,_))
+            M.pure(L.cons(a, L.cons(head, tail))),
+            M.map(insert2(a, M.pure(tail)))(L.cons[A](head,_))
           )
       )
     }
 
   def insert3[A](a: Repr[A], r: Repr[NonDet[List[A]]]): Repr[NonDet[List[A]]] =
-    ND.bind(r)(
+    M.bind(r)(
       L.recur[A, NonDet[List[A]]]
-        (ND.pure(L.cons(a, L.nil)),
+        (M.pure(L.cons(a, L.nil)),
         (head, tail) => tailsol =>
           ND.choice(
-            ND.pure(L.cons(a, L.cons(head, tail))),
-            ND.map(tailsol)(L.cons[A](head,_))
+            M.pure(L.cons(a, L.cons(head, tail))),
+            M.map(tailsol)(L.cons[A](head,_))
           )
       ))
 
   def perm[A](l: Repr[List[A]]): Repr[NonDet[List[A]]] =
-    L.foldr[A, NonDet[List[A]]](ND.pure(L.nil[A]), insert2[A])(l)
+    L.foldr[A, NonDet[List[A]]](M.pure(L.nil[A]), insert2[A])(l)
 }
 
 import org.scalatest._
