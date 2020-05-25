@@ -67,22 +67,31 @@ case class Perm[Repr[_]](implicit
   val L: Lists[Repr],
   val B: Base[Repr]){
 
-  def insert[A](a: Repr[A], l: Repr[List[A]]): Repr[List[List[A]]] =
-    ND.choice(
-      ND.pure(L.cons(a, l)),
+  def insert[A](a: Repr[A], r: Repr[List[List[A]]]): Repr[List[List[A]]] =
+    ND.bind(r){ l =>
+      ND.choice(
+        ND.pure(L.cons(a, l)),
+        L.`match`(l)(
+          ND.fail[List[A]],
+          (head, tail) => ND.map(insert(a, ND.pure(tail)))(L.cons[A](head,_))
+        )
+      )
+    }
+
+  def insert2[A](a: Repr[A], r: Repr[List[List[A]]]): Repr[List[List[A]]] =
+    ND.bind(r){ l =>
       L.`match`(l)(
-        ND.fail[List[A]],
-        (head, tail) => ND.map(insert(a, tail))(L.cons[A](head,_))))
+        ND.pure(L.cons(a, L.nil)),
+        (head, tail) =>
+          ND.choice(
+            ND.pure(L.cons(a, L.cons(head, tail))),
+            ND.map(insert2(a, ND.pure(tail)))(L.cons[A](head,_))
+          )
+      )
+    }
 
   def perm[A](l: Repr[List[A]]): Repr[List[List[A]]] =
-    L.foldr[A, List[List[A]]](
-      ND.pure(L.nil[A]),
-      (a: Repr[A], r: Repr[List[List[A]]]) =>
-        ND.bind(r)(insert[A](a, _)))(l)
-
-  def perm2[A](l: List[A]): List[List[A]] =
-    ND.run(perm(L.list(l)))
-
+    L.foldr[A, List[List[A]]](ND.pure(L.nil[A]), insert2[A])(l)
 }
 
 import org.scalatest._
@@ -101,7 +110,7 @@ class NonDetSpec extends FunSpec with Matchers{
     }
 
     it("works 2"){
-      P.perm2(List(1,2,3)) shouldBe List(List(1, 2, 3), List(2, 1, 3), List(2, 3, 1), List(1, 3, 2), List(3, 1, 2), List(3, 2, 1))
+      P.perm(List(1,2,3)) shouldBe List(List(1, 2, 3), List(2, 1, 3), List(2, 3, 1), List(1, 3, 2), List(3, 1, 2), List(3, 2, 1))
     }
   }
 }

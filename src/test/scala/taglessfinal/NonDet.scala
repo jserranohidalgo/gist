@@ -24,6 +24,8 @@ abstract class Lists[Repr[_]]{
   def nil[A]: Repr[List[A]]
   def cons[A](head: Repr[A], tail: Repr[List[A]]): Repr[List[A]]
   def list[A](l: List[A]): Repr[List[A]]
+  def `match`[A, B](l: Repr[List[A]])(
+    nil: Repr[B], cons: (Repr[A], Repr[List[A]]) => Repr[B]): Repr[B]
   def recur[A, B](nil: Repr[B],
     cons: (Repr[A], Repr[List[A]]) => Repr[B] => Repr[B])(
     l: Repr[List[A]]): Repr[B]
@@ -46,6 +48,13 @@ object Lists{
 
     def cons[A](head: List[A], tail: List[List[A]]): List[List[A]] =
       combine(head, tail)(_ :: _)
+
+    def `match`[A, B](l: List[List[A]])(
+      nil: List[B], cons: (List[A], List[List[A]]) => List[B]): List[B] =
+      l.flatMap{
+        case Nil => nil
+        case h::t => cons(List(h), List(t))
+      }
 
     def recur[A, B](nil: List[B], cons: (List[A], List[List[A]]) => List[B] => List[B])(
         l: List[List[A]]): List[B] =
@@ -84,8 +93,16 @@ case class Perm[Repr[_]](implicit
           L.cons(a, L.cons(head, tail)),
           L.cons(head, tailsol)))(l)
 
+  def insert2[A](a: Repr[A], l: Repr[List[A]]): Repr[List[A]] =
+    L.`match`(l)(
+      L.cons(a, L.nil),
+      (head, tail) =>
+        ND.choice(
+          L.cons(a, L.cons(head, tail)),
+          L.cons(head, insert2(a, tail))))
+
   def perm[A](l: Repr[List[A]]): Repr[List[A]] =
-    L.foldr(L.nil[A], insert[A])(l)
+    L.foldr(L.nil[A], insert2[A])(l)
 
   def perm[A](l: List[A]): List[List[A]] =
     ND.run(perm(L.list(l)))
