@@ -115,14 +115,14 @@ case class Perm[Repr[_], ND[_]](implicit
       ))
 
   def perm[A](l: Repr[List[A]]): Repr[NonDet[List[A]]] =
-    L.foldr[A, NonDet[List[A]]](ND.pure(L.nil[A]), insert3[A])(l)
+    L.foldr[A, NonDet[List[A]]](ND.pure(L.nil[A]), insert2[A])(l)
 }
 
 import org.scalatest._
 
-class NonDetSpec extends FunSpec with Matchers{
+class NonDetMonadic extends FunSpec with Matchers{
 
-  describe("NonDeterminism through tagless final without monads"){
+  describe("NonDeterminism through tagless final with tagless-final monads"){
 
     val P = Perm[Id, List]
 

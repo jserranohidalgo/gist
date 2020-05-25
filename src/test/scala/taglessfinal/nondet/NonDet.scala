@@ -108,7 +108,7 @@ import org.scalatest._
 
 class NonDetSpec extends FunSpec with Matchers{
 
-  describe("NonDeterminism through tagless final without monads"){
+  describe("NonDeterminism through tagless final without monads (direct style)"){
 
     val P = Perm[List]
 
