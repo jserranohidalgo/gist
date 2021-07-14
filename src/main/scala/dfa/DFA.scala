@@ -1,7 +1,7 @@
 package dfa
 
 case class DFA[Q, Σ](initial: Q, f: (Q, Σ) => Q, finals: Set[Q]){
-  val fext[Q, Σ]: (Q, List[Σ]) => Q =
+  val fext: (Q, List[Σ]) => Q =
     (q, word) => word.foldLeft(q)(f)
 }
 
